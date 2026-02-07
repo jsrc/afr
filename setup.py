@@ -10,6 +10,7 @@ setup(
     install_requires=[
         "requests>=2.32.0",
         "beautifulsoup4>=4.12.0",
+        "Pillow>=10.0.0",
     ],
     extras_require={
         "dev": ["pytest>=8.2.0"],

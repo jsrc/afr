@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from ..models import DeliveryResult
@@ -25,6 +26,18 @@ class SenderRouter:
         self.dry_run = dry_run
 
     def send(self, target: str, message: str) -> RoutedDelivery:
+        return self._route(
+            primary_call=lambda sender: sender.send(target, message),
+            fallback_call=lambda sender: sender.send(target, message),
+        )
+
+    def send_image(self, target: str, image_path: Path) -> RoutedDelivery:
+        return self._route(
+            primary_call=lambda sender: sender.send_image(target, image_path),
+            fallback_call=lambda sender: sender.send_image(target, image_path),
+        )
+
+    def _route(self, primary_call, fallback_call) -> RoutedDelivery:
         if self.dry_run:
             result = DeliveryResult(channel="dry-run", success=True, response_excerpt="dry run mode")
             return RoutedDelivery(final_result=result, attempts=[result])
@@ -32,13 +45,13 @@ class SenderRouter:
         attempts: list[DeliveryResult] = []
 
         if self.primary:
-            primary_result = self.primary.send(target, message)
+            primary_result = primary_call(self.primary)
             attempts.append(primary_result)
             if primary_result.success:
                 return RoutedDelivery(final_result=primary_result, attempts=attempts)
 
         if self.fallback and (not self.primary or self.fallback.name != self.primary.name):
-            fallback_result = self.fallback.send(target, message)
+            fallback_result = fallback_call(self.fallback)
             attempts.append(fallback_result)
             return RoutedDelivery(final_result=fallback_result, attempts=attempts)
 

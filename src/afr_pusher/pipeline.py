@@ -7,6 +7,7 @@ from .config import Settings
 from .fetchers.afr import AFRFetcher
 from .message import format_batch_message, format_single_article_message
 from .models import Article, PipelineStats
+from .preview import SummaryCardRenderer
 from .senders.router import SenderRouter
 from .store import SQLiteStore
 from .translators.base import Translator
@@ -21,6 +22,7 @@ class NewsPipeline:
         sender_router: SenderRouter,
         store: SQLiteStore,
         logger: Optional[logging.Logger] = None,
+        preview_renderer: Optional[SummaryCardRenderer] = None,
     ):
         self.settings = settings
         self.fetcher = fetcher
@@ -28,6 +30,16 @@ class NewsPipeline:
         self.sender_router = sender_router
         self.store = store
         self.logger = logger or logging.getLogger(__name__)
+        if preview_renderer is not None:
+            self.preview_renderer = preview_renderer
+        elif settings.preview_enabled:
+            self.preview_renderer = SummaryCardRenderer(
+                output_dir=settings.preview_output_dir,
+                max_titles=settings.preview_max_titles,
+                logger=self.logger,
+            )
+        else:
+            self.preview_renderer = None
 
     def run_once(self) -> PipelineStats:
         stats = PipelineStats()
@@ -76,6 +88,25 @@ class NewsPipeline:
 
         if not ready_for_delivery:
             return stats
+
+        preview_path = None
+        if self.preview_renderer is not None:
+            translated_titles = [title for _, title, _ in ready_for_delivery]
+            preview_path = self.preview_renderer.render(translated_titles)
+            if preview_path:
+                preview_result = self.sender_router.send_image(self.settings.wechat_target, preview_path)
+                if preview_result.final_result.success:
+                    self.logger.info(
+                        "preview image sent: path=%s channel=%s",
+                        preview_path,
+                        preview_result.final_result.channel,
+                    )
+                else:
+                    self.logger.warning(
+                        "preview image send failed: path=%s error=%s",
+                        preview_path,
+                        preview_result.final_result.error_message,
+                    )
 
         if include_article_content and len(ready_for_delivery) == 1:
             _, title, content = ready_for_delivery[0]

@@ -28,16 +28,29 @@ class PrefixTranslator(Translator):
 class CapturingSender(Sender):
     name = "capturing"
 
-    def __init__(self, success: bool = True):
+    def __init__(self, success: bool = True, image_success: bool = True):
         self.success = success
+        self.image_success = image_success
         self.calls: list[tuple[str, str]] = []
+        self.image_calls: list[tuple[str, Path]] = []
+        self.events: list[str] = []
 
     def send(self, target: str, message: str) -> DeliveryResult:
+        self.events.append("text")
         self.calls.append((target, message))
         return DeliveryResult(
             channel=self.name,
             success=self.success,
             error_message=None if self.success else "send failed",
+        )
+
+    def send_image(self, target: str, image_path: Path) -> DeliveryResult:
+        self.events.append("image")
+        self.image_calls.append((target, image_path))
+        return DeliveryResult(
+            channel=self.name,
+            success=self.image_success,
+            error_message=None if self.image_success else "image send failed",
         )
 
 
@@ -60,6 +73,9 @@ def _settings(db_path: Path, max_articles: int = 10) -> Settings:
         wecom_webhook_url=None,
         desktop_send_script=None,
         desktop_send_timeout_sec=30,
+        preview_enabled=False,
+        preview_output_dir=db_path.parent / "previews",
+        preview_max_titles=3,
         run_interval_sec=60,
         dry_run=False,
     )
@@ -122,3 +138,42 @@ def test_pipeline_single_article_sends_title_and_content(tmp_path: Path) -> None
     assert sender.calls[0][1] == "标题：ZH:Single Title\n\n内容：ZH:This is full article content with enough details."
     assert stats.sent == 1
     assert stats.failed == 0
+
+
+class FakePreviewRenderer:
+    def __init__(self, preview_path: Path):
+        self.preview_path = preview_path
+        self.captured_titles: list[str] = []
+
+    def render(self, translated_titles: list[str]) -> Path:
+        self.captured_titles = translated_titles
+        return self.preview_path
+
+
+def test_pipeline_sends_preview_image_before_text(tmp_path: Path) -> None:
+    articles = [_article("pabc001", "Title One"), _article("pabc002", "Title Two")]
+    sender = CapturingSender(success=True, image_success=True)
+    preview_path = tmp_path / "previews" / "preview.png"
+    preview_path.parent.mkdir(parents=True)
+    preview_path.write_bytes(b"fake-png")
+
+    settings = _settings(tmp_path / "preview.db")
+    settings.preview_enabled = True
+    preview_renderer = FakePreviewRenderer(preview_path)
+
+    pipeline = NewsPipeline(
+        settings=settings,
+        fetcher=FakeFetcher(articles),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=SQLiteStore(tmp_path / "preview.db"),
+        preview_renderer=preview_renderer,
+    )
+
+    stats = pipeline.run_once()
+
+    assert sender.events == ["image", "text"]
+    assert sender.image_calls[0] == ("江上", preview_path)
+    assert sender.calls[0][1] == "1. ZH:Title One；2. ZH:Title Two"
+    assert preview_renderer.captured_titles == ["ZH:Title One", "ZH:Title Two"]
+    assert stats.sent == 2

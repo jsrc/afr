@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from ..models import DeliveryResult
 from .base import Sender
@@ -23,8 +24,29 @@ class DesktopScriptSender(Sender):
                 error_message=f"Script not found: {self.script_path}",
             )
 
-        command = ["bash", str(self.script_path), target]
+        return self._run(command=["bash", str(self.script_path), target], input_text=message)
 
+    def send_image(self, target: str, image_path: Path) -> DeliveryResult:
+        if not self.script_path.exists():
+            return DeliveryResult(
+                channel=self.name,
+                success=False,
+                error_message=f"Script not found: {self.script_path}",
+            )
+        image = Path(image_path)
+        if not image.exists():
+            return DeliveryResult(
+                channel=self.name,
+                success=False,
+                error_message=f"Image not found: {image}",
+            )
+
+        return self._run(
+            command=["bash", str(self.script_path), target, "--image", str(image)],
+            input_text=None,
+        )
+
+    def _run(self, command: list[str], input_text: Optional[str]) -> DeliveryResult:
         env = os.environ.copy()
         env.setdefault("LANG", "en_US.UTF-8")
 
@@ -34,7 +56,7 @@ class DesktopScriptSender(Sender):
                 check=False,
                 timeout=self.timeout_sec,
                 capture_output=True,
-                input=message,
+                input=input_text,
                 text=True,
                 env=env,
             )

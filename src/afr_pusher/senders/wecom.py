@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+from pathlib import Path
 from typing import Optional
 
 import requests
@@ -26,7 +29,28 @@ class WeComWebhookSender(Sender):
                 "content": message,
             },
         }
+        return self._post_payload(payload)
 
+    def send_image(self, target: str, image_path: Path) -> DeliveryResult:
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except Exception as exc:
+            return DeliveryResult(
+                channel=self.name,
+                success=False,
+                error_message=f"read image failed: {exc}",
+            )
+
+        payload = {
+            "msgtype": "image",
+            "image": {
+                "base64": base64.b64encode(image_bytes).decode("ascii"),
+                "md5": hashlib.md5(image_bytes).hexdigest(),
+            },
+        }
+        return self._post_payload(payload)
+
+    def _post_payload(self, payload: dict) -> DeliveryResult:
         try:
             response = self.session.post(
                 self.webhook_url,

@@ -23,6 +23,9 @@ def _settings(provider: str) -> Settings:
         wecom_webhook_url=None,
         desktop_send_script=None,
         desktop_send_timeout_sec=30,
+        preview_enabled=False,
+        preview_output_dir=__import__("pathlib").Path("/tmp/afr-pusher-previews"),
+        preview_max_titles=3,
         run_interval_sec=60,
         dry_run=True,
     )

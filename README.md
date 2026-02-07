@@ -12,6 +12,21 @@
 1. 企业微信 Webhook（官方）
 2. 桌面微信自动化脚本（仓库内置 `./scripts/send.sh`）
 
+## 首图摘要卡片（最小版）
+
+开启后会先生成一张竖版摘要图片（默认 `1080x1620`），再继续发送文本消息：
+
+```env
+PREVIEW_ENABLED=true
+PREVIEW_OUTPUT_DIR=./data/previews
+PREVIEW_MAX_TITLES=3
+```
+
+说明：
+1. 图片会落地到 `PREVIEW_OUTPUT_DIR`
+2. 发送顺序是“先图片，后文本”
+3. 企业微信 Webhook 支持图片消息；如果当前发送通道不支持图片，会记录日志，但不影响文本发送
+
 ## 运行前准备
 
 1. Python 3.9+
@@ -20,6 +35,7 @@
 - macOS 已安装并登录微信
 - 已安装 `peekaboo`
 - 给运行终端授予“辅助功能”权限（Accessibility）
+- 若要发送图片，`osascript` 和 `sips` 需可用（macOS 默认自带）
 
 ## 1. 下载和安装
 
@@ -144,3 +160,6 @@ launchd 日志文件（默认）：
 1. 检查命令是否用了 `--max-articles 1`
 2. 检查来源页是否确实只有 1 条符合过滤条件
 3. 查看日志里 `sending message: ... items=...` 的实际值
+
+测试桌面脚本图片发送：
+1. `./scripts/send.sh 你的联系人 --image /绝对路径/preview.png`

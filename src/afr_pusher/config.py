@@ -44,6 +44,9 @@ class Settings:
     wecom_webhook_url: Optional[str]
     desktop_send_script: Optional[Path]
     desktop_send_timeout_sec: int
+    preview_enabled: bool
+    preview_output_dir: Path
+    preview_max_titles: int
 
     run_interval_sec: int
     dry_run: bool
@@ -83,9 +86,14 @@ class Settings:
             wecom_webhook_url=(os.getenv("WECOM_WEBHOOK_URL") or "").strip() or None,
             desktop_send_script=desktop_script,
             desktop_send_timeout_sec=int(os.getenv("DESKTOP_SEND_TIMEOUT_SEC", "45")),
+            preview_enabled=_as_bool(os.getenv("PREVIEW_ENABLED", "false"), default=False),
+            preview_output_dir=Path(os.getenv("PREVIEW_OUTPUT_DIR", "./data/previews")).expanduser(),
+            preview_max_titles=int(os.getenv("PREVIEW_MAX_TITLES", "3")),
             run_interval_sec=int(os.getenv("RUN_INTERVAL_SEC", "600")),
             dry_run=_as_bool(os.getenv("DRY_RUN", "false"), default=False),
         )
 
     def ensure_dirs(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.preview_enabled:
+            self.preview_output_dir.mkdir(parents=True, exist_ok=True)
