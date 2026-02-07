@@ -25,6 +25,13 @@ class PrefixTranslator(Translator):
         return f"ZH:{text}"
 
 
+class FailingTranslator(Translator):
+    name = "failing"
+
+    def translate(self, text: str, source_lang: Optional[str], target_lang: str) -> str:
+        raise AssertionError("translator should not be called when cache is hit")
+
+
 class CapturingSender(Sender):
     name = "capturing"
 
@@ -136,6 +143,43 @@ def test_pipeline_single_article_sends_title_and_content(tmp_path: Path) -> None
 
     assert len(sender.calls) == 1
     assert sender.calls[0][1] == "标题：ZH:Single Title\n\n内容：ZH:This is full article content with enough details."
+    assert stats.sent == 1
+    assert stats.failed == 0
+
+
+def test_pipeline_single_article_uses_cached_translation_when_title_exists(tmp_path: Path) -> None:
+    db_path = tmp_path / "single-cache.db"
+    store = SQLiteStore(db_path)
+    sender = CapturingSender(success=True)
+    cached_article = _article(
+        "pcache001",
+        "Same Title",
+        content="Old cached content",
+    )
+    store.upsert_event(
+        cached_article,
+        translated_title="ZH:缓存标题",
+        translated_summary="ZH:缓存正文",
+    )
+    store.mark_sent(cached_article.record_key, "capturing")
+
+    incoming_article = _article(
+        "pincoming001",
+        "Same Title",
+        content="Fresh content should not trigger translation",
+    )
+    pipeline = NewsPipeline(
+        settings=_settings(db_path, max_articles=1),
+        fetcher=FakeFetcher([incoming_article]),
+        translator=FailingTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=store,
+    )
+
+    stats = pipeline.run_once()
+
+    assert len(sender.calls) == 1
+    assert sender.calls[0][1] == "标题：ZH:缓存标题\n\n内容：ZH:缓存正文"
     assert stats.sent == 1
     assert stats.failed == 0
 

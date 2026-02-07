@@ -167,3 +167,23 @@ class SQLiteStore:
             if not row:
                 return None
             return str(row["status"])
+
+    def get_sent_translation_by_title(self, title: str) -> Optional[tuple[str, str]]:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT translated_title, translated_summary
+                FROM article_events
+                WHERE title = ? AND status = 'sent'
+                ORDER BY COALESCE(sent_at, last_attempt_at, created_at) DESC
+                LIMIT 1
+                """,
+                (title,),
+            ).fetchone()
+            if not row:
+                return None
+            translated_title = str(row["translated_title"])
+            translated_summary = str(row["translated_summary"])
+            if not translated_title or not translated_summary:
+                return None
+            return translated_title, translated_summary

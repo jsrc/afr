@@ -58,21 +58,30 @@ class NewsPipeline:
             self.store.upsert_event(article, article.title, article.summary)
 
             try:
-                translated_title = self.translator.translate(
-                    article.title,
-                    source_lang=self.settings.source_lang,
-                    target_lang=self.settings.target_lang,
+                cached_translation = (
+                    self.store.get_sent_translation_by_title(article.title) if include_article_content else None
                 )
-                content_source = article.content or article.summary
-                translated_summary = (
-                    self.translator.translate(
-                        content_source,
+                if cached_translation is not None:
+                    translated_title, translated_summary = cached_translation
+                    self.logger.info("translation cache hit: title=%s", article.title)
+                else:
+                    translated_title = self.translator.translate(
+                        article.title,
                         source_lang=self.settings.source_lang,
                         target_lang=self.settings.target_lang,
                     )
-                    if include_article_content
-                    else article.summary
-                )
+                    content_source = article.content or article.summary
+                    translated_summary = (
+                        self.translator.translate(
+                            content_source,
+                            source_lang=self.settings.source_lang,
+                            target_lang=self.settings.target_lang,
+                        )
+                        if include_article_content
+                        else article.summary
+                    )
+                    if include_article_content:
+                        self.logger.info("translation cache miss: title=%s", article.title)
                 self.store.upsert_event(article, translated_title, translated_summary)
                 ready_for_delivery.append((article, translated_title, translated_summary))
 
