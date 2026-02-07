@@ -5,7 +5,7 @@ from typing import Optional
 
 from .config import Settings
 from .fetchers.afr import AFRFetcher
-from .message import format_batch_message
+from .message import format_batch_message, format_single_article_message
 from .models import Article, PipelineStats
 from .senders.router import SenderRouter
 from .store import SQLiteStore
@@ -38,7 +38,8 @@ class NewsPipeline:
             failed=0,
             skipped=0,
         )
-        ready_for_delivery: list[tuple[Article, str]] = []
+        include_article_content = self.settings.afr_max_articles == 1
+        ready_for_delivery: list[tuple[Article, str, str]] = []
 
         for article in articles:
             # Persist raw content first so a failed translation/delivery can be retried later.
@@ -50,9 +51,18 @@ class NewsPipeline:
                     source_lang=self.settings.source_lang,
                     target_lang=self.settings.target_lang,
                 )
-                translated_summary = article.summary
+                content_source = article.content or article.summary
+                translated_summary = (
+                    self.translator.translate(
+                        content_source,
+                        source_lang=self.settings.source_lang,
+                        target_lang=self.settings.target_lang,
+                    )
+                    if include_article_content
+                    else article.summary
+                )
                 self.store.upsert_event(article, translated_title, translated_summary)
-                ready_for_delivery.append((article, translated_title))
+                ready_for_delivery.append((article, translated_title, translated_summary))
 
             except Exception as exc:
                 self.store.mark_failed(article.record_key, str(exc))
@@ -67,20 +77,27 @@ class NewsPipeline:
         if not ready_for_delivery:
             return stats
 
-        batch_message = format_batch_message([title for _, title in ready_for_delivery])
+        if include_article_content and len(ready_for_delivery) == 1:
+            _, title, content = ready_for_delivery[0]
+            batch_message = format_single_article_message(title, content)
+            mode = "single-with-content"
+        else:
+            batch_message = format_batch_message([title for _, title, _ in ready_for_delivery])
+            mode = "batch-titles"
         self.logger.info(
-            "sending batch message: items=%s chars=%s",
+            "sending message: mode=%s items=%s chars=%s",
+            mode,
             len(ready_for_delivery),
             len(batch_message),
         )
         routed = self.sender_router.send(self.settings.wechat_target, batch_message)
 
-        for article, _ in ready_for_delivery:
+        for article, _, _ in ready_for_delivery:
             for attempt in routed.attempts:
                 self.store.record_delivery_attempt(article.record_key, self.settings.wechat_target, attempt)
 
         if routed.final_result.success:
-            for article, _ in ready_for_delivery:
+            for article, _, _ in ready_for_delivery:
                 self.store.mark_sent(article.record_key, routed.final_result.channel)
             stats = PipelineStats(
                 fetched=stats.fetched,
@@ -90,7 +107,7 @@ class NewsPipeline:
             )
         else:
             error = routed.final_result.error_message or "unknown send failure"
-            for article, _ in ready_for_delivery:
+            for article, _, _ in ready_for_delivery:
                 self.store.mark_failed(article.record_key, error)
             stats = PipelineStats(
                 fetched=stats.fetched,

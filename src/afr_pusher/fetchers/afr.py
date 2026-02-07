@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import hashlib
 import json
 import re
@@ -18,6 +19,8 @@ HREF_RE = re.compile(
     r"href=[\"'](?P<href>(?:https?://www\.afr\.com)?/[^\"'#? ]*-\d{8}-p[0-9a-z]+(?:/)?)[\"']",
     re.IGNORECASE,
 )
+ARTICLE_BODY_MIN_LEN = 80
+ARTICLE_CONTENT_MAX_CHARS = 3500
 
 
 class AFRFetcher:
@@ -85,6 +88,7 @@ class AFRFetcher:
     def _fetch_article(self, url: str) -> Optional[Article]:
         html = self._get_text(url)
         soup = BeautifulSoup(html, "html.parser")
+        ld_json = self._extract_ld_json(soup)
 
         title = self._meta_content(soup, "property", "og:title") or self._safe_title(soup)
         summary = self._meta_content(soup, "name", "description") or self._meta_content(
@@ -95,11 +99,12 @@ class AFRFetcher:
         updated_at = self._extract_datetime(soup, "article:modified_time")
 
         if not title or not summary:
-            ld_json = self._extract_ld_json(soup)
             title = title or ld_json.get("headline") or ld_json.get("name")
             summary = summary or ld_json.get("description")
             published_at = published_at or self._normalize_dt(ld_json.get("datePublished"))
             updated_at = updated_at or self._normalize_dt(ld_json.get("dateModified"))
+
+        content = self._extract_article_content(soup, ld_json)
 
         if not title:
             return None
@@ -117,6 +122,7 @@ class AFRFetcher:
             summary=summary.strip(),
             published_at=published_at,
             updated_at=updated_at,
+            content=content,
         )
 
     def _safe_title(self, soup: BeautifulSoup) -> Optional[str]:
@@ -156,9 +162,90 @@ class AFRFetcher:
                 if not isinstance(candidate, dict):
                     continue
                 typename = str(candidate.get("@type", "")).lower()
-                if typename in {"newsarticle", "article", "reportagearticle", "analysisnewsarticle"}:
+                if typename in {
+                    "newsarticle",
+                    "article",
+                    "reportagearticle",
+                    "analysisnewsarticle",
+                    "liveblogposting",
+                    "blogposting",
+                }:
                     return candidate
         return {}
+
+    def _extract_article_content(self, soup: BeautifulSoup, ld_json: dict) -> Optional[str]:
+        chunks: list[str] = []
+
+        chunks.extend(self._extract_ld_article_bodies(ld_json))
+        if not chunks:
+            chunks.extend(self._extract_dom_paragraphs(soup, min_len=ARTICLE_BODY_MIN_LEN))
+        if not chunks:
+            chunks.extend(self._extract_dom_paragraphs(soup, min_len=40))
+
+        merged = self._merge_chunks(chunks, max_chars=ARTICLE_CONTENT_MAX_CHARS)
+        return merged or None
+
+    def _extract_ld_article_bodies(self, ld_json: dict) -> list[str]:
+        if not isinstance(ld_json, dict):
+            return []
+
+        chunks: list[str] = []
+        direct = self._clean_text(ld_json.get("articleBody"))
+        if direct:
+            chunks.append(direct)
+
+        updates = ld_json.get("liveBlogUpdate")
+        if isinstance(updates, list):
+            for item in updates:
+                if not isinstance(item, dict):
+                    continue
+                body = self._clean_text(item.get("articleBody"))
+                if body and len(body) >= 40:
+                    chunks.append(body)
+
+        return chunks
+
+    def _extract_dom_paragraphs(self, soup: BeautifulSoup, min_len: int) -> list[str]:
+        article = soup.find("article")
+        root = article if article else soup
+
+        chunks: list[str] = []
+        for p in root.find_all("p"):
+            text = self._clean_text(p.get_text(" ", strip=True))
+            if not text:
+                continue
+            if len(text) < min_len:
+                continue
+            chunks.append(text)
+        return chunks
+
+    def _merge_chunks(self, chunks: list[str], max_chars: int) -> str:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        total = 0
+        sep = "\n\n"
+
+        for chunk in chunks:
+            item = self._clean_text(chunk)
+            if not item or item in seen:
+                continue
+            seen.add(item)
+
+            extra = len(item) if not cleaned else len(sep) + len(item)
+            if total + extra > max_chars:
+                break
+
+            cleaned.append(item)
+            total += extra
+
+        return sep.join(cleaned)
+
+    def _clean_text(self, value: object) -> str:
+        if not isinstance(value, str):
+            return ""
+        text = html_lib.unescape(value)
+        text = BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+        return " ".join(text.split())
 
     def _iter_candidates(self, payload: object) -> Iterable[object]:
         if isinstance(payload, list):

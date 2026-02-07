@@ -41,11 +41,11 @@ class CapturingSender(Sender):
         )
 
 
-def _settings(db_path: Path) -> Settings:
+def _settings(db_path: Path, max_articles: int = 10) -> Settings:
     return Settings(
         afr_homepage_url="https://www.afr.com",
         afr_article_path_prefix=None,
-        afr_max_articles=10,
+        afr_max_articles=max_articles,
         request_timeout_sec=5,
         request_user_agent="ua",
         db_path=db_path,
@@ -65,7 +65,7 @@ def _settings(db_path: Path) -> Settings:
     )
 
 
-def _article(article_id: str, title: str) -> Article:
+def _article(article_id: str, title: str, content: Optional[str] = None) -> Article:
     return Article(
         article_id=article_id,
         record_key=f"{article_id}:2026-02-07T00:00:00+00:00",
@@ -74,6 +74,7 @@ def _article(article_id: str, title: str) -> Article:
         summary="summary",
         published_at="2026-02-07T00:00:00+00:00",
         updated_at="2026-02-07T00:00:00+00:00",
+        content=content,
     )
 
 
@@ -97,3 +98,27 @@ def test_pipeline_sends_titles_in_one_message(tmp_path: Path) -> None:
     assert stats.sent == 2
     assert stats.failed == 0
     assert stats.skipped == 0
+
+
+def test_pipeline_single_article_sends_title_and_content(tmp_path: Path) -> None:
+    article = _article(
+        "pone001",
+        "Single Title",
+        content="This is full article content with enough details.",
+    )
+    sender = CapturingSender(success=True)
+
+    pipeline = NewsPipeline(
+        settings=_settings(tmp_path / "single.db", max_articles=1),
+        fetcher=FakeFetcher([article]),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=SQLiteStore(tmp_path / "single.db"),
+    )
+
+    stats = pipeline.run_once()
+
+    assert len(sender.calls) == 1
+    assert sender.calls[0][1] == "标题：ZH:Single Title\n\n内容：ZH:This is full article content with enough details."
+    assert stats.sent == 1
+    assert stats.failed == 0

@@ -18,6 +18,7 @@ class Article:
     summary: str
     published_at: Optional[str]
     updated_at: Optional[str]
+    content: Optional[str] = None
 
 
 @dataclass(frozen=True)
