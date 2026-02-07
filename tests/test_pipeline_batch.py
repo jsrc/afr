@@ -78,6 +78,9 @@ def _settings(db_path: Path, max_articles: int = 10) -> Settings:
         deepl_formality=None,
         wechat_target="江上",
         wecom_webhook_url=None,
+        telegram_bot_token=None,
+        telegram_chat_id=None,
+        telegram_api_base="https://api.telegram.org",
         desktop_send_script=None,
         desktop_send_timeout_sec=30,
         preview_enabled=False,
@@ -180,6 +183,44 @@ def test_pipeline_single_article_uses_cached_translation_when_title_exists(tmp_p
 
     assert len(sender.calls) == 1
     assert sender.calls[0][1] == "标题：ZH:缓存标题\n\n内容：ZH:缓存正文"
+    assert stats.sent == 1
+    assert stats.failed == 0
+
+
+def test_pipeline_single_article_bypasses_untranslated_cache(tmp_path: Path) -> None:
+    db_path = tmp_path / "single-cache-bypass.db"
+    store = SQLiteStore(db_path)
+    sender = CapturingSender(success=True)
+    cached_article = _article(
+        "pcache002",
+        "Same Title",
+        content="Same content",
+    )
+    # Simulate stale cache from an older run where translation matched source text.
+    store.upsert_event(
+        cached_article,
+        translated_title="Same Title",
+        translated_summary="Same content",
+    )
+    store.mark_sent(cached_article.record_key, "capturing")
+
+    incoming_article = _article(
+        "pincoming002",
+        "Same Title",
+        content="Same content",
+    )
+    pipeline = NewsPipeline(
+        settings=_settings(db_path, max_articles=1),
+        fetcher=FakeFetcher([incoming_article]),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=store,
+    )
+
+    stats = pipeline.run_once()
+
+    assert len(sender.calls) == 1
+    assert sender.calls[0][1] == "标题：ZH:Same Title\n\n内容：ZH:Same content"
     assert stats.sent == 1
     assert stats.failed == 0
 

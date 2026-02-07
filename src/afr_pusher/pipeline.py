@@ -61,8 +61,19 @@ class NewsPipeline:
                 cached_translation = (
                     self.store.get_sent_translation_by_title(article.title) if include_article_content else None
                 )
+                content_source = article.content or article.summary
+                use_cached_translation = False
                 if cached_translation is not None:
                     translated_title, translated_summary = cached_translation
+                    # Guard against stale cache where translated title is still raw source text.
+                    if translated_title.strip() != article.title.strip():
+                        use_cached_translation = True
+                    else:
+                        self.logger.info(
+                            "translation cache bypassed (looks untranslated): title=%s",
+                            article.title,
+                        )
+                if use_cached_translation:
                     self.logger.info("translation cache hit: title=%s", article.title)
                 else:
                     translated_title = self.translator.translate(
@@ -70,7 +81,6 @@ class NewsPipeline:
                         source_lang=self.settings.source_lang,
                         target_lang=self.settings.target_lang,
                     )
-                    content_source = article.content or article.summary
                     translated_summary = (
                         self.translator.translate(
                             content_source,

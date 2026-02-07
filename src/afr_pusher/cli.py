@@ -17,11 +17,13 @@ from .fetchers.afr import AFRFetcher
 from .pipeline import NewsPipeline
 from .senders.desktop_script import DesktopScriptSender
 from .senders.router import SenderRouter
+from .senders.telegram import TelegramBotSender
 from .senders.wecom import WeComWebhookSender
 from .store import SQLiteStore
 from .translators import build_translator
 
 DEFAULT_LAUNCHD_LABEL = "com.afr.pusher"
+SEND_CHANNEL_CHOICES = ("telegram", "wecom", "desktop")
 
 
 def _load_dotenv(path: Path) -> None:
@@ -38,22 +40,73 @@ def _load_dotenv(path: Path) -> None:
             os.environ[key] = value
 
 
-def _build_router(settings: Settings, session: requests.Session) -> SenderRouter:
-    primary = None
-    fallback = None
+def _build_router(
+    settings: Settings,
+    session: requests.Session,
+    send_channel: str | None = None,
+) -> SenderRouter:
+    selected_channel = (send_channel or "").strip().lower() or None
+    if selected_channel and selected_channel not in SEND_CHANNEL_CHOICES:
+        choices = ", ".join(SEND_CHANNEL_CHOICES)
+        raise SystemExit(f"Unsupported --send-channel '{selected_channel}'. Available: {choices}.")
 
+    telegram_sender = None
+    telegram_any = bool(settings.telegram_bot_token or settings.telegram_chat_id)
+    if settings.telegram_bot_token and settings.telegram_chat_id:
+        telegram_sender = TelegramBotSender(
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
+            timeout_sec=settings.request_timeout_sec,
+            api_base=settings.telegram_api_base,
+            session=session,
+        )
+    elif telegram_any and selected_channel in (None, "telegram"):
+        raise SystemExit("Telegram sender requires both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
+
+    wecom_sender = None
     if settings.wecom_webhook_url:
-        primary = WeComWebhookSender(
+        wecom_sender = WeComWebhookSender(
             webhook_url=settings.wecom_webhook_url,
             timeout_sec=settings.request_timeout_sec,
             session=session,
         )
 
+    desktop_sender = None
     if settings.desktop_send_script:
-        fallback = DesktopScriptSender(
+        desktop_sender = DesktopScriptSender(
             script_path=settings.desktop_send_script,
             timeout_sec=settings.desktop_send_timeout_sec,
         )
+
+    if selected_channel == "telegram":
+        if not telegram_sender:
+            raise SystemExit("--send-channel telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
+        settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
+        return SenderRouter(primary=telegram_sender, fallback=None, dry_run=settings.dry_run)
+    if selected_channel == "wecom":
+        if not wecom_sender:
+            raise SystemExit("--send-channel wecom requires WECOM_WEBHOOK_URL.")
+        return SenderRouter(primary=wecom_sender, fallback=None, dry_run=settings.dry_run)
+    if selected_channel == "desktop":
+        if not desktop_sender:
+            raise SystemExit("--send-channel desktop requires DESKTOP_SEND_SCRIPT.")
+        return SenderRouter(primary=desktop_sender, fallback=None, dry_run=settings.dry_run)
+
+    primary = None
+    fallback = None
+    if telegram_sender:
+        primary = telegram_sender
+        settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
+    if wecom_sender:
+        if primary is None:
+            primary = wecom_sender
+        elif fallback is None:
+            fallback = wecom_sender
+    if desktop_sender:
+        if primary is None:
+            primary = desktop_sender
+        elif fallback is None:
+            fallback = desktop_sender
 
     return SenderRouter(primary=primary, fallback=fallback, dry_run=settings.dry_run)
 
@@ -83,6 +136,7 @@ def _build_launchd_plist(
     minute: int,
     max_articles: int,
     log_level: str,
+    send_channel: str | None = None,
 ) -> str:
     logs_dir = workdir / "logs"
     stdout_log = logs_dir / "launchd.out.log"
@@ -100,6 +154,8 @@ def _build_launchd_plist(
         "--log-level",
         log_level,
     ]
+    if send_channel:
+        args.extend(["--send-channel", send_channel])
     program_args_xml = "\n".join(f"    <string>{arg}</string>" for arg in args)
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -147,6 +203,7 @@ def _install_launchd_job(
     minute: int,
     max_articles: int,
     log_level: str,
+    send_channel: str | None = None,
 ) -> Path:
     workdir = Path.cwd().resolve()
     logs_dir = workdir / "logs"
@@ -165,6 +222,7 @@ def _install_launchd_job(
         minute=minute,
         max_articles=max_articles,
         log_level=log_level,
+        send_channel=send_channel,
     )
     plist_path.write_text(plist_content, encoding="utf-8")
 
@@ -208,6 +266,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-articles", type=int, default=None, help="Override max articles per run")
     parser.add_argument("--dry-run", action="store_true", help="Run pipeline without sending messages")
+    parser.add_argument(
+        "--send-channel",
+        choices=SEND_CHANNEL_CHOICES,
+        default=None,
+        help="Explicitly select a sender channel: telegram, wecom, or desktop",
+    )
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
         "--install-launchd",
@@ -259,6 +323,7 @@ def main() -> None:
             minute=minute,
             max_articles=settings.afr_max_articles,
             log_level=args.log_level,
+            send_channel=args.send_channel,
         )
         logger.info(
             "launchd installed: label=%s plist=%s schedule=%02d:%02d",
@@ -286,11 +351,12 @@ def main() -> None:
         session=session,
     )
     translator = build_translator(settings, session=session)
-    router = _build_router(settings, session=session)
+    router = _build_router(settings, session=session, send_channel=args.send_channel)
 
     if not settings.dry_run and not (router.primary or router.fallback):
         raise SystemExit(
-            "No sender configured. Set WECOM_WEBHOOK_URL or DESKTOP_SEND_SCRIPT, or use --dry-run."
+            "No sender configured. Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, "
+            "WECOM_WEBHOOK_URL, or DESKTOP_SEND_SCRIPT, or use --dry-run."
         )
 
     pipeline = NewsPipeline(

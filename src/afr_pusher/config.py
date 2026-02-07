@@ -42,6 +42,9 @@ class Settings:
 
     wechat_target: str
     wecom_webhook_url: Optional[str]
+    telegram_bot_token: Optional[str]
+    telegram_chat_id: Optional[str]
+    telegram_api_base: str
     desktop_send_script: Optional[Path]
     desktop_send_timeout_sec: int
     preview_enabled: bool
@@ -84,6 +87,9 @@ class Settings:
             deepl_formality=(os.getenv("DEEPL_FORMALITY") or "").strip() or None,
             wechat_target=os.getenv("WECHAT_TARGET", "File Transfer").strip(),
             wecom_webhook_url=(os.getenv("WECOM_WEBHOOK_URL") or "").strip() or None,
+            telegram_bot_token=(os.getenv("TELEGRAM_BOT_TOKEN") or "").strip() or None,
+            telegram_chat_id=(os.getenv("TELEGRAM_CHAT_ID") or "").strip() or None,
+            telegram_api_base=os.getenv("TELEGRAM_API_BASE", "https://api.telegram.org").strip(),
             desktop_send_script=desktop_script,
             desktop_send_timeout_sec=int(os.getenv("DESKTOP_SEND_TIMEOUT_SEC", "45")),
             preview_enabled=_as_bool(os.getenv("PREVIEW_ENABLED", "false"), default=False),

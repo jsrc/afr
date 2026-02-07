@@ -29,3 +29,25 @@ def test_build_launchd_plist_contains_schedule_and_args(tmp_path: Path) -> None:
     assert "<string>10</string>" in xml
     assert "<key>PYTHONPATH</key>" in xml
     assert f"<string>{workdir / 'src'}</string>" in xml
+
+
+def test_build_launchd_plist_includes_send_channel_when_provided(tmp_path: Path) -> None:
+    workdir = tmp_path / "repo"
+    workdir.mkdir(parents=True)
+    env_file = workdir / ".env"
+    env_file.write_text("X=1\n", encoding="utf-8")
+
+    xml = _build_launchd_plist(
+        label="com.afr.pusher",
+        python_executable="/usr/bin/python3",
+        workdir=workdir,
+        env_file=env_file,
+        hour=16,
+        minute=30,
+        max_articles=10,
+        log_level="INFO",
+        send_channel="wecom",
+    )
+
+    assert "<string>--send-channel</string>" in xml
+    assert "<string>wecom</string>" in xml

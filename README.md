@@ -1,6 +1,6 @@
 # AFR Pusher
 
-把 AFR 新闻标题抓下来，翻译后合并成一条消息，发送到微信。
+把 AFR 新闻标题抓下来，翻译后合并成一条消息，发送到微信或 Telegram。
 
 默认行为：
 1. 每次抓最新 10 条标题
@@ -8,9 +8,10 @@
 3. 10 条标题合并成 1 条消息发送
 4. 当 `--max-articles 1`（或 `AFR_MAX_ARTICLES=1`）时，发送“标题 + 正文翻译”
 
-支持两种发送通道：
-1. 企业微信 Webhook（官方）
-2. 桌面微信自动化脚本（仓库内置 `./scripts/send.sh`）
+支持三种发送通道：
+1. Telegram Bot API
+2. 企业微信 Webhook（官方）
+3. 桌面微信自动化脚本（仓库内置 `./scripts/send.sh`）
 
 ## 首图摘要卡片（最小版）
 
@@ -55,11 +56,10 @@ pip install -e '.[dev]'
 cp .env.example .env
 ```
 
-打开 `.env`，至少改这几个：
+打开 `.env`，至少改 DeepL 和你实际要用的发送通道：
 
 ```env
 DEEPL_API_KEY=你的_deepl_key
-WECHAT_TARGET=你的微信联系人名
 ```
 
 ### 常见配置示例
@@ -78,14 +78,40 @@ AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
 AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 ```
 
-发送通道二选一（可同时配，失败自动降级）：
+发送通道配置（可同时配，当前为“主通道 + 一级降级”）：
+1. 配了 Telegram 时：主通道是 Telegram，降级到 WeCom（若未配 WeCom，则降级到桌面脚本）
+2. 未配 Telegram 时：主通道是 WeCom，降级到桌面脚本
+3. 可用命令参数 `--send-channel telegram|wecom|desktop` 显式指定通道（指定后只发该通道）
 
 ```env
+# Telegram 机器人（可选）
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
 # 官方通道（可选）
 WECOM_WEBHOOK_URL=
 
 # 桌面微信脚本通道（默认已指向仓库内脚本）
+WECHAT_TARGET=你的微信联系人名
 DESKTOP_SEND_SCRIPT=./scripts/send.sh
+```
+
+### 获取 `TELEGRAM_CHAT_ID`（一条命令）
+
+先做前置动作：
+1. 私聊：在 Telegram 里打开你的 bot，发送 `/start` 或任意消息
+2. 群聊：把 bot 拉进群后，在群里发一条消息（群 `chat_id` 一般是负数）
+
+然后执行这条命令（把 `xxx` 换成你的 bot token）：
+
+```bash
+TELEGRAM_BOT_TOKEN=xxx; curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" | python3 -c 'import sys,json; d=json.load(sys.stdin); rows={}; [rows.__setitem__(c.get("id"), (c.get("type",""), c.get("title") or c.get("username") or c.get("first_name") or "")) for u in d.get("result",[]) for c in [((u.get("message") or u.get("edited_message") or u.get("channel_post") or {}).get("chat") or {})] if c.get("id") is not None]; print("\\n".join(f"{cid}\\t{t}\\t{name}" for cid,(t,name) in rows.items()) or "No chat found. Send a message to the bot first, then rerun.")'
+```
+
+输出第一列就是 `chat_id`，填入 `.env`：
+
+```env
+TELEGRAM_CHAT_ID=你找到的数字ID
 ```
 
 ## 3. 运行
@@ -100,6 +126,12 @@ python3 -m afr_pusher --dry-run --max-articles 10 --log-level INFO
 
 ```bash
 python3 -m afr_pusher --max-articles 10 --log-level INFO
+```
+
+显式指定发送通道（示例：只发企业微信）：
+
+```bash
+python3 -m afr_pusher --max-articles 10 --send-channel wecom --log-level INFO
 ```
 
 定时循环运行（每 10 分钟）：
