@@ -26,20 +26,6 @@ DEFAULT_LAUNCHD_LABEL = "com.afr.pusher"
 SEND_CHANNEL_CHOICES = ("telegram", "wecom", "desktop")
 
 
-def _load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip("\"'")
-        if key and key not in os.environ:
-            os.environ[key] = value
-
-
 def _build_router(
     settings: Settings,
     session: requests.Session,
@@ -131,6 +117,7 @@ def _build_launchd_plist(
     label: str,
     python_executable: str,
     workdir: Path,
+    config_file: Path,
     env_file: Path,
     hour: int,
     minute: int,
@@ -147,6 +134,8 @@ def _build_launchd_plist(
         python_executable,
         "-m",
         "afr_pusher",
+        "--config-file",
+        str(config_file),
         "--env-file",
         str(env_file),
         "--max-articles",
@@ -198,6 +187,7 @@ def _launchd_domain() -> str:
 def _install_launchd_job(
     *,
     label: str,
+    config_file: Path,
     env_file: Path,
     hour: int,
     minute: int,
@@ -217,6 +207,7 @@ def _install_launchd_job(
         label=label,
         python_executable=sys.executable,
         workdir=workdir,
+        config_file=config_file.resolve(),
         env_file=env_file.resolve(),
         hour=hour,
         minute=minute,
@@ -254,6 +245,7 @@ def _uninstall_launchd_job(*, label: str) -> Path:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AFR translator and WeChat delivery pipeline")
+    parser.add_argument("--config-file", default="config.ini", help="Path to config.ini file")
     parser.add_argument("--env-file", default=".env", help="Path to .env file")
     parser.add_argument("--loop", action="store_true", help="Run forever with interval")
     parser.add_argument("--interval-sec", type=int, default=None, help="Loop interval in seconds")
@@ -294,15 +286,16 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
 
-    _load_dotenv(Path(args.env_file))
-
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     logger = logging.getLogger("afr_pusher")
 
-    settings = Settings.from_env()
+    settings = Settings.from_files(
+        config_file=Path(args.config_file),
+        env_file=Path(args.env_file),
+    )
     if args.dry_run:
         settings.dry_run = True
     if args.max_articles is not None:
@@ -318,6 +311,7 @@ def main() -> None:
         hour, minute = args.daily_at
         plist_path = _install_launchd_job(
             label=args.launchd_label,
+            config_file=Path(args.config_file),
             env_file=Path(args.env_file),
             hour=hour,
             minute=minute,

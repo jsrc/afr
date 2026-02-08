@@ -1,0 +1,63 @@
+[fetch]
+# 默认抓 AFR 首页；也可以改成某个专题页 URL
+AFR_HOMEPAGE_URL=https://www.afr.com
+# 示例：markets live 专题页
+# AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
+
+# 每次抓取的标题数量（建议 10）
+# 注意：如果设为 1，则会发送“标题 + 正文翻译”
+AFR_MAX_ARTICLES=10
+# 网络请求超时（秒）
+REQUEST_TIMEOUT_SEC=12
+# 请求头 User-Agent，保持默认即可
+REQUEST_USER_AGENT=Mozilla/5.0
+# 可选：只保留指定路径前缀下的文章链接
+AFR_ARTICLE_PATH_PREFIX=
+# 示例：只抓 markets/equity-markets 下的文章
+# AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
+
+[storage]
+# SQLite 文件路径
+DB_PATH=./data/afr_pusher.db
+
+[translation]
+# 翻译提供方：deepl / noop
+TRANSLATOR_PROVIDER=deepl
+# 源语言（EN=英文）
+SOURCE_LANG=EN
+# 目标语言（ZH=中文）
+TARGET_LANG=ZH
+# DeepL 接口地址（一般不用改）
+DEEPL_ENDPOINT=https://api-free.deepl.com/v2/translate
+# 术语表 ID（可选）
+DEEPL_GLOSSARY_ID=
+# 语气设置（可选）
+DEEPL_FORMALITY=
+
+[sender]
+# 微信联系人名或群名
+WECHAT_TARGET=File Transfer
+# Telegram 目标 chat_id（私聊/群聊都可以，用数字 ID）
+TELEGRAM_CHAT_ID=
+# Telegram API 基础地址（一般不用改）
+TELEGRAM_API_BASE=https://api.telegram.org
+# 企业微信 Webhook（可选）
+WECOM_WEBHOOK_URL=
+# 桌面脚本路径（默认使用仓库内脚本）
+DESKTOP_SEND_SCRIPT=./scripts/send.sh
+# 桌面脚本超时（秒）
+DESKTOP_SEND_TIMEOUT_SEC=45
+
+[preview]
+# 是否生成并尝试先发首图（true/false）
+PREVIEW_ENABLED=false
+# 首图输出目录
+PREVIEW_OUTPUT_DIR=./data/previews
+# 首图最多展示几条标题
+PREVIEW_MAX_TITLES=3
+
+[runtime]
+# 循环模式下的间隔秒数
+RUN_INTERVAL_SEC=600
+# true=仅调试不真实发送
+DRY_RUN=false

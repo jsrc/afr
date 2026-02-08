@@ -6,6 +6,8 @@ from afr_pusher.cli import _build_launchd_plist
 def test_build_launchd_plist_contains_schedule_and_args(tmp_path: Path) -> None:
     workdir = tmp_path / "repo"
     workdir.mkdir(parents=True)
+    config_file = workdir / "config.ini"
+    config_file.write_text("[settings]\nAFR_MAX_ARTICLES=10\n", encoding="utf-8")
     env_file = workdir / ".env"
     env_file.write_text("X=1\n", encoding="utf-8")
 
@@ -13,6 +15,7 @@ def test_build_launchd_plist_contains_schedule_and_args(tmp_path: Path) -> None:
         label="com.afr.pusher",
         python_executable="/usr/bin/python3",
         workdir=workdir,
+        config_file=config_file,
         env_file=env_file,
         hour=16,
         minute=30,
@@ -23,6 +26,8 @@ def test_build_launchd_plist_contains_schedule_and_args(tmp_path: Path) -> None:
     assert "<string>com.afr.pusher</string>" in xml
     assert "<key>Hour</key>" in xml and "<integer>16</integer>" in xml
     assert "<key>Minute</key>" in xml and "<integer>30</integer>" in xml
+    assert "<string>--config-file</string>" in xml
+    assert f"<string>{config_file}</string>" in xml
     assert "<string>--env-file</string>" in xml
     assert f"<string>{env_file}</string>" in xml
     assert "<string>--max-articles</string>" in xml
@@ -34,6 +39,8 @@ def test_build_launchd_plist_contains_schedule_and_args(tmp_path: Path) -> None:
 def test_build_launchd_plist_includes_send_channel_when_provided(tmp_path: Path) -> None:
     workdir = tmp_path / "repo"
     workdir.mkdir(parents=True)
+    config_file = workdir / "config.ini"
+    config_file.write_text("[settings]\nAFR_MAX_ARTICLES=10\n", encoding="utf-8")
     env_file = workdir / ".env"
     env_file.write_text("X=1\n", encoding="utf-8")
 
@@ -41,6 +48,7 @@ def test_build_launchd_plist_includes_send_channel_when_provided(tmp_path: Path)
         label="com.afr.pusher",
         python_executable="/usr/bin/python3",
         workdir=workdir,
+        config_file=config_file,
         env_file=env_file,
         hour=16,
         minute=30,

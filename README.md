@@ -17,7 +17,7 @@
 
 开启后会先生成一张竖版摘要图片（默认 `1080x1620`），再继续发送文本消息：
 
-```env
+```ini
 PREVIEW_ENABLED=true
 PREVIEW_OUTPUT_DIR=./data/previews
 PREVIEW_MAX_TITLES=3
@@ -53,10 +53,24 @@ pip install -e '.[dev]'
 复制配置文件：
 
 ```bash
+cp config.ini.example config.ini
 cp .env.example .env
 ```
 
-打开 `.env`，至少改 DeepL 和你实际要用的发送通道：
+默认 `.gitignore` 已忽略 `config.ini` 和 `.env`。
+
+配置分层：
+1. `config.ini`：业务参数（抓取、翻译方向、路由、运行参数等）
+2. `.env`：敏感信息（例如 `DEEPL_API_KEY`、`TELEGRAM_BOT_TOKEN`），并覆盖 `config.ini` 同名项
+
+优先级（高 -> 低）：
+1. 命令行参数
+2. 进程环境变量
+3. `.env`
+4. `config.ini`
+5. 代码默认值
+
+先在 `.env` 至少填写 DeepL Key：
 
 ```env
 DEEPL_API_KEY=你的_deepl_key
@@ -66,14 +80,14 @@ DEEPL_API_KEY=你的_deepl_key
 
 抓 AFR 首页（默认）：
 
-```env
+```ini
 AFR_HOMEPAGE_URL=https://www.afr.com
 AFR_ARTICLE_PATH_PREFIX=
 ```
 
 抓 Markets Live 列表（推荐这样配）：
 
-```env
+```ini
 AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
 AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 ```
@@ -83,9 +97,8 @@ AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 2. 未配 Telegram 时：主通道是 WeCom，降级到桌面脚本
 3. 可用命令参数 `--send-channel telegram|wecom|desktop` 显式指定通道（指定后只发该通道）
 
-```env
-# Telegram 机器人（可选）
-TELEGRAM_BOT_TOKEN=
+```ini
+# Telegram chat_id（可配在 config.ini）
 TELEGRAM_CHAT_ID=
 
 # 官方通道（可选）
@@ -94,6 +107,11 @@ WECOM_WEBHOOK_URL=
 # 桌面微信脚本通道（默认已指向仓库内脚本）
 WECHAT_TARGET=你的微信联系人名
 DESKTOP_SEND_SCRIPT=./scripts/send.sh
+```
+
+```env
+# Telegram token 建议放 .env（敏感）
+TELEGRAM_BOT_TOKEN=
 ```
 
 ### 获取 `TELEGRAM_CHAT_ID`（一条命令）
@@ -108,9 +126,9 @@ DESKTOP_SEND_SCRIPT=./scripts/send.sh
 TELEGRAM_BOT_TOKEN=xxx; curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" | python3 -c 'import sys,json; d=json.load(sys.stdin); rows={}; [rows.__setitem__(c.get("id"), (c.get("type",""), c.get("title") or c.get("username") or c.get("first_name") or "")) for u in d.get("result",[]) for c in [((u.get("message") or u.get("edited_message") or u.get("channel_post") or {}).get("chat") or {})] if c.get("id") is not None]; print("\\n".join(f"{cid}\\t{t}\\t{name}" for cid,(t,name) in rows.items()) or "No chat found. Send a message to the bot first, then rerun.")'
 ```
 
-输出第一列就是 `chat_id`，填入 `.env`：
+输出第一列就是 `chat_id`，填入 `config.ini`（或放 `.env` 覆盖同名项）：
 
-```env
+```ini
 TELEGRAM_CHAT_ID=你找到的数字ID
 ```
 
