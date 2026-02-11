@@ -1,0 +1,108 @@
+.page {
+  min-height: 100vh;
+  padding: 28rpx 24rpx 40rpx;
+}
+
+.hero {
+  border-radius: 24rpx;
+  padding: 28rpx;
+  background: linear-gradient(135deg, #163f70 0%, #2b70b6 100%);
+  color: #ffffff;
+}
+
+.hero-title {
+  font-size: 38rpx;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  opacity: 0.92;
+}
+
+.status-scroll {
+  margin-top: 20rpx;
+  white-space: nowrap;
+}
+
+.status-row {
+  display: flex;
+  gap: 12rpx;
+}
+
+.status-chip {
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: #274665;
+  background: #dbe8f6;
+}
+
+.status-chip-active {
+  color: #ffffff;
+  background: #2b70b6;
+}
+
+.state {
+  margin-top: 22rpx;
+  font-size: 26rpx;
+  color: #3f556c;
+}
+
+.state-error {
+  color: #b42318;
+}
+
+.list {
+  margin-top: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.card {
+  padding: 24rpx;
+  border-radius: 22rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(9, 30, 66, 0.08);
+}
+
+.card-title-cn {
+  font-size: 31rpx;
+  font-weight: 700;
+  color: #12263b;
+  line-height: 1.45;
+}
+
+.card-title-en {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #5a718a;
+  line-height: 1.45;
+}
+
+.card-preview {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.5;
+  color: #39526d;
+}
+
+.card-meta {
+  margin-top: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.meta-tag {
+  font-size: 22rpx;
+  text-transform: uppercase;
+  color: #2b70b6;
+}
+
+.meta-time {
+  font-size: 22rpx;
+  color: #6d8094;
+}

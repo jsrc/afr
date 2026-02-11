@@ -1,0 +1,40 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero-title">文章数据库</view>
+    <view class="hero-subtitle">列表显示中英文标题，点击查看翻译正文</view>
+  </view>
+
+  <scroll-view class="status-scroll" scroll-x="true" enable-flex="true">
+    <view class="status-row">
+      <block wx:for="{{statusOptions}}" wx:key="value" wx:for-item="option">
+        <view
+          class="status-chip {{status === option.value ? 'status-chip-active' : ''}}"
+          data-status="{{option.value}}"
+          bindtap="onStatusChange"
+        >
+          {{option.label}}
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{loading}}" class="state">加载中...</view>
+  <view wx:if="{{errorMessage}}" class="state state-error">{{errorMessage}}</view>
+  <view wx:if="{{!loading && !errorMessage && articles.length === 0}}" class="state">
+    暂无文章，请先运行抓取流程后刷新。
+  </view>
+
+  <view class="list">
+    <block wx:for="{{articles}}" wx:key="record_key" wx:for-item="article">
+      <view class="card" data-record-key="{{article.record_key}}" bindtap="onTapArticle">
+        <view class="card-title-cn">{{article.zhTitle}}</view>
+        <view class="card-title-en">{{article.enTitle}}</view>
+        <view class="card-preview">{{article.previewContent}}</view>
+        <view class="card-meta">
+          <text class="meta-tag">{{article.status}}</text>
+          <text class="meta-time">{{article.displayTime}}</text>
+        </view>
+      </view>
+    </block>
+  </view>
+</view>

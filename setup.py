@@ -11,6 +11,8 @@ setup(
         "requests>=2.32.0",
         "beautifulsoup4>=4.12.0",
         "Pillow>=10.0.0",
+        "fastapi>=0.116.0",
+        "uvicorn>=0.35.0",
     ],
     extras_require={
         "dev": ["pytest>=8.2.0"],
@@ -18,6 +20,7 @@ setup(
     entry_points={
         "console_scripts": [
             "afr-pusher=afr_pusher.cli:main",
+            "afr-miniapi=afr_pusher.miniapp_api:main",
         ]
     },
 )

@@ -54,8 +54,8 @@ def test_build_launchd_plist_includes_send_channel_when_provided(tmp_path: Path)
         minute=30,
         max_articles=10,
         log_level="INFO",
-        send_channel="wecom",
+        send_channel="telegram",
     )
 
     assert "<string>--send-channel</string>" in xml
-    assert "<string>wecom</string>" in xml
+    assert "<string>telegram</string>" in xml

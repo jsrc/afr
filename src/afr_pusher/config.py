@@ -75,6 +75,13 @@ def _pick(
     return str(value)
 
 
+def _split_csv(value: Optional[str]) -> tuple[str, ...]:
+    raw = (value or "").strip()
+    if not raw:
+        return ()
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 @dataclass
 class Settings:
     afr_homepage_url: str
@@ -95,12 +102,13 @@ class Settings:
     deepl_formality: Optional[str]
 
     wechat_target: str
-    wecom_webhook_url: Optional[str]
     telegram_bot_token: Optional[str]
     telegram_chat_id: Optional[str]
     telegram_api_base: str
     desktop_send_script: Optional[Path]
     desktop_send_timeout_sec: int
+    miniapp_api_key: Optional[str]
+    miniapp_api_cors_origins: tuple[str, ...]
     preview_enabled: bool
     preview_output_dir: Path
     preview_max_titles: int
@@ -146,12 +154,13 @@ class Settings:
             deepl_glossary_id=(_pick(values, "DEEPL_GLOSSARY_ID") or "").strip() or None,
             deepl_formality=(_pick(values, "DEEPL_FORMALITY") or "").strip() or None,
             wechat_target=(_pick(values, "WECHAT_TARGET", "File Transfer") or "File Transfer").strip(),
-            wecom_webhook_url=(_pick(values, "WECOM_WEBHOOK_URL") or "").strip() or None,
             telegram_bot_token=(_pick(values, "TELEGRAM_BOT_TOKEN") or "").strip() or None,
             telegram_chat_id=(_pick(values, "TELEGRAM_CHAT_ID") or "").strip() or None,
             telegram_api_base=(_pick(values, "TELEGRAM_API_BASE", "https://api.telegram.org") or "").strip(),
             desktop_send_script=desktop_script,
             desktop_send_timeout_sec=int(_pick(values, "DESKTOP_SEND_TIMEOUT_SEC", "45") or "45"),
+            miniapp_api_key=(_pick(values, "MINIAPP_API_KEY") or "").strip() or None,
+            miniapp_api_cors_origins=_split_csv(_pick(values, "MINIAPP_API_CORS_ORIGINS")),
             preview_enabled=_as_bool(_pick(values, "PREVIEW_ENABLED", "false"), default=False),
             preview_output_dir=Path(_pick(values, "PREVIEW_OUTPUT_DIR", "./data/previews") or "").expanduser(),
             preview_max_titles=int(_pick(values, "PREVIEW_MAX_TITLES", "3") or "3"),

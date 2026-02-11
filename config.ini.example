@@ -41,12 +41,16 @@ WECHAT_TARGET=File Transfer
 TELEGRAM_CHAT_ID=
 # Telegram API 基础地址（一般不用改）
 TELEGRAM_API_BASE=https://api.telegram.org
-# 企业微信 Webhook（可选）
-WECOM_WEBHOOK_URL=
-# 桌面脚本路径（默认使用仓库内脚本）
+# 桌面脚本路径（仅 macOS 本地机器会启用）
 DESKTOP_SEND_SCRIPT=./scripts/send.sh
 # 桌面脚本超时（秒）
 DESKTOP_SEND_TIMEOUT_SEC=45
+
+[api]
+# MiniApp API 鉴权 key 请放在 .env 里的 MINIAPP_API_KEY
+# CORS 白名单（逗号分隔）
+# 示例：MINIAPP_API_CORS_ORIGINS=https://mini.example.com,https://admin.example.com
+MINIAPP_API_CORS_ORIGINS=
 
 [preview]
 # 是否生成并尝试先发首图（true/false）

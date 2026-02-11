@@ -17,6 +17,8 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
     assert settings.run_interval_sec == 600
     assert settings.dry_run is False
     assert settings.telegram_bot_token is None
+    assert settings.miniapp_api_key is None
+    assert settings.miniapp_api_cors_origins == ()
     assert settings.desktop_send_script is not None
 
 
@@ -39,6 +41,28 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
     assert settings.afr_max_articles == 7
     assert settings.translator_provider == "noop"
     assert settings.wechat_target == "Ops Team"
+
+
+def test_settings_from_files_reads_api_security_values(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.ini"
+    config_file.write_text(
+        "[api]\n"
+        "MINIAPP_API_KEY=from-ini\n"
+        "MINIAPP_API_CORS_ORIGINS=https://mini.example.com, https://admin.example.com\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings.from_files(
+        config_file=config_file,
+        env_file=tmp_path / ".env",
+        base_env={},
+    )
+
+    assert settings.miniapp_api_key == "from-ini"
+    assert settings.miniapp_api_cors_origins == (
+        "https://mini.example.com",
+        "https://admin.example.com",
+    )
 
 
 def test_settings_from_files_uses_dotenv_to_override_ini(tmp_path: Path) -> None:

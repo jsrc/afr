@@ -1,0 +1,13 @@
+[Unit]
+Description=AFR pusher one-shot job
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=afr
+Group=afr
+WorkingDirectory=/opt/afr
+Environment="PYTHONPATH=/opt/afr/src"
+EnvironmentFile=/opt/afr/.env
+ExecStart=/opt/afr/.venv/bin/python -m afr_pusher --config-file /opt/afr/config.ini --env-file /opt/afr/.env --max-articles 10 --send-channel telegram --log-level INFO

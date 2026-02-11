@@ -14,16 +14,20 @@ import requests
 
 from .config import Settings
 from .fetchers.afr import AFRFetcher
+from .miniapp_api import run_miniapp_api_server
 from .pipeline import NewsPipeline
 from .senders.desktop_script import DesktopScriptSender
 from .senders.router import SenderRouter
 from .senders.telegram import TelegramBotSender
-from .senders.wecom import WeComWebhookSender
 from .store import SQLiteStore
 from .translators import build_translator
 
 DEFAULT_LAUNCHD_LABEL = "com.afr.pusher"
-SEND_CHANNEL_CHOICES = ("telegram", "wecom", "desktop")
+SEND_CHANNEL_CHOICES = ("telegram", "desktop")
+
+
+def _desktop_sender_supported() -> bool:
+    return sys.platform == "darwin"
 
 
 def _build_router(
@@ -31,6 +35,7 @@ def _build_router(
     session: requests.Session,
     send_channel: str | None = None,
 ) -> SenderRouter:
+    logger = logging.getLogger("afr_pusher")
     selected_channel = (send_channel or "").strip().lower() or None
     if selected_channel and selected_channel not in SEND_CHANNEL_CHOICES:
         choices = ", ".join(SEND_CHANNEL_CHOICES)
@@ -49,31 +54,23 @@ def _build_router(
     elif telegram_any and selected_channel in (None, "telegram"):
         raise SystemExit("Telegram sender requires both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
 
-    wecom_sender = None
-    if settings.wecom_webhook_url:
-        wecom_sender = WeComWebhookSender(
-            webhook_url=settings.wecom_webhook_url,
-            timeout_sec=settings.request_timeout_sec,
-            session=session,
-        )
-
     desktop_sender = None
-    if settings.desktop_send_script:
+    if settings.desktop_send_script and _desktop_sender_supported():
         desktop_sender = DesktopScriptSender(
             script_path=settings.desktop_send_script,
             timeout_sec=settings.desktop_send_timeout_sec,
         )
+    elif settings.desktop_send_script:
+        logger.info("desktop sender disabled on non-macOS host: platform=%s", sys.platform)
 
     if selected_channel == "telegram":
         if not telegram_sender:
             raise SystemExit("--send-channel telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
         settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
         return SenderRouter(primary=telegram_sender, fallback=None, dry_run=settings.dry_run)
-    if selected_channel == "wecom":
-        if not wecom_sender:
-            raise SystemExit("--send-channel wecom requires WECOM_WEBHOOK_URL.")
-        return SenderRouter(primary=wecom_sender, fallback=None, dry_run=settings.dry_run)
     if selected_channel == "desktop":
+        if not _desktop_sender_supported():
+            raise SystemExit("--send-channel desktop is only supported on macOS local machines.")
         if not desktop_sender:
             raise SystemExit("--send-channel desktop requires DESKTOP_SEND_SCRIPT.")
         return SenderRouter(primary=desktop_sender, fallback=None, dry_run=settings.dry_run)
@@ -83,11 +80,6 @@ def _build_router(
     if telegram_sender:
         primary = telegram_sender
         settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
-    if wecom_sender:
-        if primary is None:
-            primary = wecom_sender
-        elif fallback is None:
-            fallback = wecom_sender
     if desktop_sender:
         if primary is None:
             primary = desktop_sender
@@ -262,7 +254,7 @@ def _parse_args() -> argparse.Namespace:
         "--send-channel",
         choices=SEND_CHANNEL_CHOICES,
         default=None,
-        help="Explicitly select a sender channel: telegram, wecom, or desktop",
+        help="Explicitly select a sender channel: telegram or desktop",
     )
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
@@ -279,6 +271,22 @@ def _parse_args() -> argparse.Namespace:
         "--launchd-label",
         default=DEFAULT_LAUNCHD_LABEL,
         help=f"launchd label (default: {DEFAULT_LAUNCHD_LABEL})",
+    )
+    parser.add_argument(
+        "--serve-api",
+        action="store_true",
+        help="Run a local JSON API for the WeChat Mini Program frontend",
+    )
+    parser.add_argument(
+        "--api-host",
+        default="127.0.0.1",
+        help="Bind host for --serve-api",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=8000,
+        help="Bind port for --serve-api",
     )
     return parser.parse_args()
 
@@ -304,6 +312,21 @@ def main() -> None:
         settings.run_interval_sec = args.interval_sec
 
     settings.ensure_dirs()
+
+    if args.serve_api:
+        if args.install_launchd or args.uninstall_launchd:
+            raise SystemExit("--serve-api cannot be combined with --install-launchd/--uninstall-launchd.")
+        if not settings.miniapp_api_key:
+            raise SystemExit("MINIAPP_API_KEY is required when --serve-api is enabled.")
+        run_miniapp_api_server(
+            db_path=settings.db_path,
+            host=args.api_host,
+            port=args.api_port,
+            api_key=settings.miniapp_api_key,
+            cors_origins=settings.miniapp_api_cors_origins,
+            logger=logger,
+        )
+        return
 
     if args.install_launchd:
         if args.daily_at is None:
@@ -350,7 +373,7 @@ def main() -> None:
     if not settings.dry_run and not (router.primary or router.fallback):
         raise SystemExit(
             "No sender configured. Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, "
-            "WECOM_WEBHOOK_URL, or DESKTOP_SEND_SCRIPT, or use --dry-run."
+            "or DESKTOP_SEND_SCRIPT (macOS only), or use --dry-run."
         )
 
     pipeline = NewsPipeline(
