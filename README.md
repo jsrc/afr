@@ -58,6 +58,11 @@ cp .env.example .env
 2. `.env`：敏感信息（例如 `DEEPL_API_KEY`、`TELEGRAM_BOT_TOKEN`、`MINIAPP_API_KEY`），并覆盖 `config.ini` 同名项
 3. 建议不要重复配置同名键，避免来源混淆
 
+Telegram 推荐放法：
+1. `TELEGRAM_BOT_TOKEN` 放 `.env`
+2. `TELEGRAM_CHAT_ID` 放 `config.ini`
+3. 只有在你需要临时覆盖目标频道时，才把 `TELEGRAM_CHAT_ID` 也写进 `.env`
+
 优先级（高 -> 低）：
 1. 命令行参数
 2. 进程环境变量
@@ -94,8 +99,16 @@ AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 2. 不再包含桌面微信发送
 
 ```ini
-# Telegram chat_id（可配在 config.ini）
-TELEGRAM_CHAT_ID=
+# 推荐写在 config.ini
+TELEGRAM_CHAT_ID=@your_channel
+```
+
+```env
+# 推荐写在 .env
+TELEGRAM_BOT_TOKEN=your_telegram_token
+
+# 可选：只有需要覆盖 config.ini 目标频道时才写
+# TELEGRAM_CHAT_ID=@another_channel
 ```
 
 MiniApp API 安全配置：
@@ -120,7 +133,7 @@ MINIAPP_API_KEY=replace_with_a_long_random_secret
 TELEGRAM_BOT_TOKEN=xxx; curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" | python3 -c 'import sys,json; d=json.load(sys.stdin); rows={}; [rows.__setitem__(c.get("id"), (c.get("type",""), c.get("title") or c.get("username") or c.get("first_name") or "")) for u in d.get("result",[]) for c in [((u.get("message") or u.get("edited_message") or u.get("channel_post") or {}).get("chat") or {})] if c.get("id") is not None]; print("\\n".join(f"{cid}\\t{t}\\t{name}" for cid,(t,name) in rows.items()) or "No chat found. Send a message to the bot first, then rerun.")'
 ```
 
-输出第一列就是 `chat_id`，填入 `config.ini`（或放 `.env` 覆盖同名项）：
+输出第一列就是 `chat_id`，默认填入 `config.ini`：
 
 ```ini
 TELEGRAM_CHAT_ID=你找到的数字ID
@@ -225,7 +238,6 @@ afr-miniapi --db-path ./data/afr_pusher.db --host 127.0.0.1 --port 8000 --api-ke
 2. `deploy/systemd/afr-pusher.service`
 3. `deploy/systemd/afr-pusher.timer`
 4. `deploy/nginx/afr-miniapi.conf`
-
 ### 5.1 安装 systemd 服务
 
 ```bash
@@ -245,6 +257,12 @@ sudo systemctl status afr-miniapi.service
 sudo systemctl status afr-pusher.timer
 ```
 
+`deploy/systemd/afr-pusher.timer` 默认使用系统级固定时间调度：
+
+```ini
+OnCalendar=*-*-* 16:30:00
+```
+
 ### 5.2 配置 Nginx 反向代理
 
 ```bash
@@ -253,7 +271,8 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-然后用 Let’s Encrypt 申请证书（示例域名替换为你的真实域名）：
+模板默认先安装 HTTP 反向代理，确保首次上线和 `certbot` 引导不互相卡住。
+然后再用 Let’s Encrypt 申请证书（示例域名替换为你的真实域名）：
 
 ```bash
 sudo certbot --nginx -d api.example.com

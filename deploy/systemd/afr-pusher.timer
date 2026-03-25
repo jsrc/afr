@@ -1,10 +1,10 @@
 [Unit]
-Description=Run AFR pusher every 10 minutes
+Description=Run AFR pusher daily at fixed time
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=10min
-AccuracySec=1min
+# Server local timezone.
+OnCalendar=*-*-* 16:30:00
+AccuracySec=1s
 Persistent=true
 Unit=afr-pusher.service
 
