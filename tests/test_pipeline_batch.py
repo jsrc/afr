@@ -76,12 +76,9 @@ def _settings(db_path: Path, max_articles: int = 10) -> Settings:
         deepl_endpoint="https://api-free.deepl.com/v2/translate",
         deepl_glossary_id=None,
         deepl_formality=None,
-        wechat_target="江上",
         telegram_bot_token=None,
-        telegram_chat_id=None,
+        telegram_chat_id="@jsrcpush",
         telegram_api_base="https://api.telegram.org",
-        desktop_send_script=None,
-        desktop_send_timeout_sec=30,
         miniapp_api_key="api-key",
         miniapp_api_cors_origins=("https://mini.example.com",),
         preview_enabled=False,
@@ -120,7 +117,7 @@ def test_pipeline_sends_titles_in_one_message(tmp_path: Path) -> None:
     stats = pipeline.run_once()
 
     assert len(sender.calls) == 1
-    assert sender.calls[0][0] == "江上"
+    assert sender.calls[0][0] == "@jsrcpush"
     assert sender.calls[0][1] == "1. ZH:Title One；2. ZH:Title Two"
     assert stats.sent == 2
     assert stats.failed == 0
@@ -259,7 +256,7 @@ def test_pipeline_sends_preview_image_before_text(tmp_path: Path) -> None:
     stats = pipeline.run_once()
 
     assert sender.events == ["image", "text"]
-    assert sender.image_calls[0] == ("江上", preview_path)
+    assert sender.image_calls[0] == ("@jsrcpush", preview_path)
     assert sender.calls[0][1] == "1. ZH:Title One；2. ZH:Title Two"
     assert preview_renderer.captured_titles == ["ZH:Title One", "ZH:Title Two"]
     assert stats.sent == 2

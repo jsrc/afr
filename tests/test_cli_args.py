@@ -14,7 +14,6 @@ def test_parse_args_uses_expected_defaults(monkeypatch) -> None:
     assert args.daily_at is None
     assert args.max_articles is None
     assert args.dry_run is False
-    assert args.send_channel is None
     assert args.log_level == "INFO"
     assert args.install_launchd is False
     assert args.uninstall_launchd is False

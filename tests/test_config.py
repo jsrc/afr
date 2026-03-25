@@ -19,7 +19,6 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
     assert settings.telegram_bot_token is None
     assert settings.miniapp_api_key is None
     assert settings.miniapp_api_cors_origins == ()
-    assert settings.desktop_send_script is not None
 
 
 def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
@@ -28,7 +27,7 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
         "[settings]\n"
         "AFR_MAX_ARTICLES=7\n"
         "TRANSLATOR_PROVIDER=noop\n"
-        "WECHAT_TARGET=Ops Team\n",
+        "TELEGRAM_CHAT_ID=@ops_team\n",
         encoding="utf-8",
     )
 
@@ -40,7 +39,7 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
 
     assert settings.afr_max_articles == 7
     assert settings.translator_provider == "noop"
-    assert settings.wechat_target == "Ops Team"
+    assert settings.telegram_chat_id == "@ops_team"
 
 
 def test_settings_from_files_reads_api_security_values(tmp_path: Path) -> None:

@@ -24,7 +24,7 @@ def test_store_sent_state_is_stable_after_upsert(tmp_path: Path) -> None:
     store.upsert_event(article, translated_title="T", translated_summary="S")
     assert store.get_event_status(article.record_key) == "pending"
 
-    store.mark_sent(article.record_key, "desktop-script")
+    store.mark_sent(article.record_key, "telegram-bot")
     assert store.is_sent(article.record_key) is True
 
     store.upsert_event(article, translated_title="T2", translated_summary="S2")
@@ -39,5 +39,5 @@ def test_get_sent_translation_by_title_only_returns_sent_rows(tmp_path: Path) ->
     store.upsert_event(article, translated_title="待发送标题", translated_summary="待发送内容")
     assert store.get_sent_translation_by_title(article.title) is None
 
-    store.mark_sent(article.record_key, "desktop-script")
+    store.mark_sent(article.record_key, "telegram-bot")
     assert store.get_sent_translation_by_title(article.title) == ("待发送标题", "待发送内容")

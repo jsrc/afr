@@ -1,6 +1,6 @@
 # AFR Pusher
 
-把 AFR 新闻标题抓下来，翻译后合并成一条消息，发送到 Telegram 或桌面微信。
+把 AFR 新闻标题抓下来，翻译后合并成一条消息，发送到 Telegram。
 
 默认行为：
 1. 每次抓最新 10 条标题
@@ -9,12 +9,7 @@
 4. 当 `--max-articles 1`（或 `AFR_MAX_ARTICLES=1`）时，发送“标题 + 正文翻译”
 
 支持发送通道：
-1. Telegram Bot API（推荐，服务器可用）
-2. 桌面微信自动化脚本（仅 macOS 本地机器可用）
-
-说明：
-1. `desktop` 发送依赖本地 GUI 微信客户端与 `peekaboo`
-2. 在 Linux/服务器环境会自动禁用桌面发送通道
+1. Telegram Bot API
 
 ## 首图摘要卡片（最小版）
 
@@ -35,11 +30,7 @@ PREVIEW_MAX_TITLES=3
 
 1. Python 3.9+
 2. DeepL API Key
-3. 如果用桌面微信发送：
-- macOS 已安装并登录微信
-- 已安装 `peekaboo`
-- 运行终端已授予辅助功能权限（Accessibility）
-- 若要发送图片，`osascript` 和 `sips` 需可用（macOS 默认自带）
+3. Telegram Bot Token
 
 ## 1. 下载和安装
 
@@ -98,18 +89,13 @@ AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
 AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 ```
 
-发送通道配置（当前为“主通道 + 一级降级”）：
-1. 配了 Telegram：主通道 Telegram
-2. 且在 macOS 本地配置 `DESKTOP_SEND_SCRIPT`：失败时可降级到桌面脚本
-3. 可用 `--send-channel telegram|desktop` 显式指定通道（指定后只发该通道）
+发送通道配置：
+1. 配置 Telegram 后直接发送到 Telegram
+2. 不再包含桌面微信发送
 
 ```ini
 # Telegram chat_id（可配在 config.ini）
 TELEGRAM_CHAT_ID=
-
-# 桌面微信脚本通道（仅 macOS 本地生效）
-WECHAT_TARGET=你的微信联系人名
-DESKTOP_SEND_SCRIPT=./scripts/send.sh
 ```
 
 MiniApp API 安全配置：
@@ -152,12 +138,6 @@ python3 -m afr_pusher --dry-run --max-articles 10 --log-level INFO
 
 ```bash
 python3 -m afr_pusher --max-articles 10 --log-level INFO
-```
-
-显式指定发送通道（只发 Telegram）：
-
-```bash
-python3 -m afr_pusher --max-articles 10 --send-channel telegram --log-level INFO
 ```
 
 定时循环运行（每 10 分钟）：
@@ -299,16 +279,7 @@ curl -sS -H 'X-API-Key: your_secret' 'https://api.example.com/api/articles?limit
 
 ## 7. 常见问题
 
-桌面发送失败：
-1. 仅支持 macOS 本地 GUI 微信客户端
-2. 确认微信客户端正在运行
-3. 确认 `peekaboo` 可用（`which peekaboo`）
-4. 给终端开辅助功能权限（System Settings -> Privacy & Security -> Accessibility）
-
 只收到 1 条标题：
 1. 检查是否用了 `--max-articles 1`
 2. 检查来源页是否只有 1 条符合过滤条件
 3. 查看日志 `sending message: ... items=...`
-
-测试桌面脚本图片发送：
-1. `./scripts/send.sh 你的联系人 --image /绝对路径/preview.png`

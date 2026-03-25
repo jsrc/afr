@@ -43,6 +43,7 @@ class NewsPipeline:
 
     def run_once(self) -> PipelineStats:
         stats = PipelineStats()
+        delivery_target = self.settings.telegram_chat_id or ""
         articles = self.fetcher.fetch_recent(limit=self.settings.afr_max_articles)
         stats = PipelineStats(
             fetched=len(articles),
@@ -113,7 +114,7 @@ class NewsPipeline:
             translated_titles = [title for _, title, _ in ready_for_delivery]
             preview_path = self.preview_renderer.render(translated_titles)
             if preview_path:
-                preview_result = self.sender_router.send_image(self.settings.wechat_target, preview_path)
+                preview_result = self.sender_router.send_image(delivery_target, preview_path)
                 if preview_result.final_result.success:
                     self.logger.info(
                         "preview image sent: path=%s channel=%s",
@@ -140,11 +141,11 @@ class NewsPipeline:
             len(ready_for_delivery),
             len(batch_message),
         )
-        routed = self.sender_router.send(self.settings.wechat_target, batch_message)
+        routed = self.sender_router.send(delivery_target, batch_message)
 
         for article, _, _ in ready_for_delivery:
             for attempt in routed.attempts:
-                self.store.record_delivery_attempt(article.record_key, self.settings.wechat_target, attempt)
+                self.store.record_delivery_attempt(article.record_key, delivery_target, attempt)
 
         if routed.final_result.success:
             for article, _, _ in ready_for_delivery:

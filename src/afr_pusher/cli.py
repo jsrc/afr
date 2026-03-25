@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,33 +15,18 @@ from .config import Settings
 from .fetchers.afr import AFRFetcher
 from .miniapp_api import run_miniapp_api_server
 from .pipeline import NewsPipeline
-from .senders.desktop_script import DesktopScriptSender
 from .senders.router import SenderRouter
 from .senders.telegram import TelegramBotSender
 from .store import SQLiteStore
 from .translators import build_translator
 
 DEFAULT_LAUNCHD_LABEL = "com.afr.pusher"
-SEND_CHANNEL_CHOICES = ("telegram", "desktop")
-
-
-def _desktop_sender_supported() -> bool:
-    return sys.platform == "darwin"
 
 
 def _build_router(
     settings: Settings,
     session: requests.Session,
-    send_channel: str | None = None,
 ) -> SenderRouter:
-    logger = logging.getLogger("afr_pusher")
-    selected_channel = (send_channel or "").strip().lower() or None
-    if selected_channel and selected_channel not in SEND_CHANNEL_CHOICES:
-        choices = ", ".join(SEND_CHANNEL_CHOICES)
-        raise SystemExit(f"Unsupported --send-channel '{selected_channel}'. Available: {choices}.")
-
-    telegram_sender = None
-    telegram_any = bool(settings.telegram_bot_token or settings.telegram_chat_id)
     if settings.telegram_bot_token and settings.telegram_chat_id:
         telegram_sender = TelegramBotSender(
             bot_token=settings.telegram_bot_token,
@@ -51,42 +35,12 @@ def _build_router(
             api_base=settings.telegram_api_base,
             session=session,
         )
-    elif telegram_any and selected_channel in (None, "telegram"):
+        return SenderRouter(primary=telegram_sender, fallback=None, dry_run=settings.dry_run)
+
+    if settings.telegram_bot_token or settings.telegram_chat_id:
         raise SystemExit("Telegram sender requires both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
 
-    desktop_sender = None
-    if settings.desktop_send_script and _desktop_sender_supported():
-        desktop_sender = DesktopScriptSender(
-            script_path=settings.desktop_send_script,
-            timeout_sec=settings.desktop_send_timeout_sec,
-        )
-    elif settings.desktop_send_script:
-        logger.info("desktop sender disabled on non-macOS host: platform=%s", sys.platform)
-
-    if selected_channel == "telegram":
-        if not telegram_sender:
-            raise SystemExit("--send-channel telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
-        settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
-        return SenderRouter(primary=telegram_sender, fallback=None, dry_run=settings.dry_run)
-    if selected_channel == "desktop":
-        if not _desktop_sender_supported():
-            raise SystemExit("--send-channel desktop is only supported on macOS local machines.")
-        if not desktop_sender:
-            raise SystemExit("--send-channel desktop requires DESKTOP_SEND_SCRIPT.")
-        return SenderRouter(primary=desktop_sender, fallback=None, dry_run=settings.dry_run)
-
-    primary = None
-    fallback = None
-    if telegram_sender:
-        primary = telegram_sender
-        settings.wechat_target = settings.telegram_chat_id or settings.wechat_target
-    if desktop_sender:
-        if primary is None:
-            primary = desktop_sender
-        elif fallback is None:
-            fallback = desktop_sender
-
-    return SenderRouter(primary=primary, fallback=fallback, dry_run=settings.dry_run)
+    return SenderRouter(primary=None, fallback=None, dry_run=settings.dry_run)
 
 
 def _parse_daily_at(value: str) -> tuple[int, int]:
@@ -115,7 +69,6 @@ def _build_launchd_plist(
     minute: int,
     max_articles: int,
     log_level: str,
-    send_channel: str | None = None,
 ) -> str:
     logs_dir = workdir / "logs"
     stdout_log = logs_dir / "launchd.out.log"
@@ -135,8 +88,6 @@ def _build_launchd_plist(
         "--log-level",
         log_level,
     ]
-    if send_channel:
-        args.extend(["--send-channel", send_channel])
     program_args_xml = "\n".join(f"    <string>{arg}</string>" for arg in args)
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -185,7 +136,6 @@ def _install_launchd_job(
     minute: int,
     max_articles: int,
     log_level: str,
-    send_channel: str | None = None,
 ) -> Path:
     workdir = Path.cwd().resolve()
     logs_dir = workdir / "logs"
@@ -205,7 +155,6 @@ def _install_launchd_job(
         minute=minute,
         max_articles=max_articles,
         log_level=log_level,
-        send_channel=send_channel,
     )
     plist_path.write_text(plist_content, encoding="utf-8")
 
@@ -250,12 +199,6 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-articles", type=int, default=None, help="Override max articles per run")
     parser.add_argument("--dry-run", action="store_true", help="Run pipeline without sending messages")
-    parser.add_argument(
-        "--send-channel",
-        choices=SEND_CHANNEL_CHOICES,
-        default=None,
-        help="Explicitly select a sender channel: telegram or desktop",
-    )
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
         "--install-launchd",
@@ -340,7 +283,6 @@ def main() -> None:
             minute=minute,
             max_articles=settings.afr_max_articles,
             log_level=args.log_level,
-            send_channel=args.send_channel,
         )
         logger.info(
             "launchd installed: label=%s plist=%s schedule=%02d:%02d",
@@ -368,12 +310,12 @@ def main() -> None:
         session=session,
     )
     translator = build_translator(settings, session=session)
-    router = _build_router(settings, session=session, send_channel=args.send_channel)
+    router = _build_router(settings, session=session)
 
     if not settings.dry_run and not (router.primary or router.fallback):
         raise SystemExit(
             "No sender configured. Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, "
-            "or DESKTOP_SEND_SCRIPT (macOS only), or use --dry-run."
+            "or use --dry-run."
         )
 
     pipeline = NewsPipeline(

@@ -35,16 +35,10 @@ DEEPL_GLOSSARY_ID=
 DEEPL_FORMALITY=
 
 [sender]
-# 微信联系人名或群名
-WECHAT_TARGET=File Transfer
 # Telegram 目标 chat_id（私聊/群聊都可以，用数字 ID）
 TELEGRAM_CHAT_ID=
 # Telegram API 基础地址（一般不用改）
 TELEGRAM_API_BASE=https://api.telegram.org
-# 桌面脚本路径（仅 macOS 本地机器会启用）
-DESKTOP_SEND_SCRIPT=./scripts/send.sh
-# 桌面脚本超时（秒）
-DESKTOP_SEND_TIMEOUT_SEC=45
 
 [api]
 # MiniApp API 鉴权 key 请放在 .env 里的 MINIAPP_API_KEY

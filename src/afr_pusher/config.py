@@ -7,10 +7,6 @@ from pathlib import Path
 from typing import Mapping, Optional
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_WECHAT_SCRIPT = PROJECT_ROOT / "scripts" / "send.sh"
-
-
 def _as_bool(value: Optional[str], default: bool) -> bool:
     if value is None:
         return default
@@ -101,12 +97,9 @@ class Settings:
     deepl_glossary_id: Optional[str]
     deepl_formality: Optional[str]
 
-    wechat_target: str
     telegram_bot_token: Optional[str]
     telegram_chat_id: Optional[str]
     telegram_api_base: str
-    desktop_send_script: Optional[Path]
-    desktop_send_timeout_sec: int
     miniapp_api_key: Optional[str]
     miniapp_api_cors_origins: tuple[str, ...]
     preview_enabled: bool
@@ -119,16 +112,6 @@ class Settings:
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, str]) -> "Settings":
         values = {key.upper(): str(value) for key, value in mapping.items() if value is not None}
-        desktop_script_raw = _pick(values, "DESKTOP_SEND_SCRIPT", str(DEFAULT_WECHAT_SCRIPT))
-        desktop_script_raw = (desktop_script_raw or "").strip()
-        desktop_script = None
-        if desktop_script_raw:
-            candidate = Path(desktop_script_raw).expanduser()
-            if not candidate.is_absolute():
-                cwd_candidate = (Path.cwd() / candidate).resolve()
-                project_candidate = (PROJECT_ROOT / candidate).resolve()
-                candidate = cwd_candidate if cwd_candidate.exists() else project_candidate
-            desktop_script = candidate
 
         return cls(
             afr_homepage_url=(_pick(values, "AFR_HOMEPAGE_URL", "https://www.afr.com") or "").strip(),
@@ -153,12 +136,9 @@ class Settings:
             ).strip(),
             deepl_glossary_id=(_pick(values, "DEEPL_GLOSSARY_ID") or "").strip() or None,
             deepl_formality=(_pick(values, "DEEPL_FORMALITY") or "").strip() or None,
-            wechat_target=(_pick(values, "WECHAT_TARGET", "File Transfer") or "File Transfer").strip(),
             telegram_bot_token=(_pick(values, "TELEGRAM_BOT_TOKEN") or "").strip() or None,
             telegram_chat_id=(_pick(values, "TELEGRAM_CHAT_ID") or "").strip() or None,
             telegram_api_base=(_pick(values, "TELEGRAM_API_BASE", "https://api.telegram.org") or "").strip(),
-            desktop_send_script=desktop_script,
-            desktop_send_timeout_sec=int(_pick(values, "DESKTOP_SEND_TIMEOUT_SEC", "45") or "45"),
             miniapp_api_key=(_pick(values, "MINIAPP_API_KEY") or "").strip() or None,
             miniapp_api_cors_origins=_split_csv(_pick(values, "MINIAPP_API_CORS_ORIGINS")),
             preview_enabled=_as_bool(_pick(values, "PREVIEW_ENABLED", "false"), default=False),
