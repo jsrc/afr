@@ -117,7 +117,7 @@ class Settings:
         return cls(
             afr_homepage_url=(_pick(values, "AFR_HOMEPAGE_URL", "https://www.afr.com") or "").strip(),
             afr_article_path_prefix=(_pick(values, "AFR_ARTICLE_PATH_PREFIX") or "").strip() or None,
-            afr_max_articles=int(_pick(values, "AFR_MAX_ARTICLES", "10") or "10"),
+            afr_max_articles=int(_pick(values, "AFR_MAX_ARTICLES", "1") or "1"),
             request_timeout_sec=float(_pick(values, "REQUEST_TIMEOUT_SEC", "12") or "12"),
             request_user_agent=(_pick(
                 values,

@@ -3,10 +3,10 @@
 把 AFR 新闻标题抓下来，翻译后合并成一条消息，发送到 Telegram。
 
 默认行为：
-1. 每次抓最新 10 条标题
+1. 每次抓最新 1 条文章
 2. 翻译方向 `EN -> ZH`
-3. 10 条标题合并成 1 条消息发送
-4. 当 `--max-articles 1`（或 `AFR_MAX_ARTICLES=1`）时，发送“标题 + 正文翻译”
+3. 默认发送“标题 + 正文翻译”
+4. 当 `--max-articles` 或 `AFR_MAX_ARTICLES` 大于 1 时，发送“标题列表汇总”
 
 Telegram 消息默认按 `HTML` 富文本发送：
 1. 批量模式：标题列表带编号和原文链接
@@ -149,13 +149,13 @@ TELEGRAM_CHAT_ID=你找到的数字ID
 先做不发消息测试：
 
 ```bash
-python3 -m afr_pusher --dry-run --max-articles 10 --log-level INFO
+python3 -m afr_pusher --dry-run --log-level INFO
 ```
 
 真实发送一次：
 
 ```bash
-python3 -m afr_pusher --max-articles 10 --log-level INFO
+python3 -m afr_pusher --log-level INFO
 ```
 
 定时循环运行（每 10 分钟）：

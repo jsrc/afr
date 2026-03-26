@@ -11,7 +11,7 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
     )
 
     assert settings.afr_homepage_url == "https://www.afr.com"
-    assert settings.afr_max_articles == 10
+    assert settings.afr_max_articles == 1
     assert settings.request_timeout_sec == 12
     assert settings.translator_provider == "deepl"
     assert settings.run_interval_sec == 600

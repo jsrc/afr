@@ -41,7 +41,7 @@ class AFRFetcher:
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": self.user_agent})
 
-    def fetch_recent(self, limit: int = 10) -> list[Article]:
+    def fetch_recent(self, limit: int = 1) -> list[Article]:
         homepage_html = self._get_text(self.homepage_url)
         article_urls = self._extract_article_urls(homepage_html)
 

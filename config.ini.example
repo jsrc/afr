@@ -4,9 +4,9 @@ AFR_HOMEPAGE_URL=https://www.afr.com
 # 示例：markets live 专题页
 # AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
 
-# 每次抓取的标题数量（建议 10）
-# 注意：如果设为 1，则会发送“标题 + 正文翻译”
-AFR_MAX_ARTICLES=10
+# 每次抓取的标题数量（默认 1）
+# 设为 1 时会发送“标题 + 正文翻译”；大于 1 时会合并为标题列表
+AFR_MAX_ARTICLES=1
 # 网络请求超时（秒）
 REQUEST_TIMEOUT_SEC=12
 # 请求头 User-Agent，保持默认即可
