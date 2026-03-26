@@ -17,6 +17,7 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
     assert settings.run_interval_sec == 600
     assert settings.dry_run is False
     assert settings.telegram_bot_token is None
+    assert settings.telegram_parse_mode == "HTML"
     assert settings.miniapp_api_key is None
     assert settings.miniapp_api_cors_origins == ()
 
@@ -87,6 +88,23 @@ def test_settings_from_files_uses_dotenv_to_override_ini(tmp_path: Path) -> None
 
     assert settings.afr_max_articles == 3
     assert settings.telegram_bot_token == "env-token"
+
+
+def test_settings_from_files_reads_telegram_parse_mode(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.ini"
+    config_file.write_text(
+        "[sender]\n"
+        "TELEGRAM_PARSE_MODE=\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings.from_files(
+        config_file=config_file,
+        env_file=tmp_path / ".env",
+        base_env={},
+    )
+
+    assert settings.telegram_parse_mode is None
 
 
 def test_settings_from_files_keeps_os_env_as_highest_priority(tmp_path: Path) -> None:

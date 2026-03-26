@@ -5,8 +5,13 @@ from typing import Optional
 
 from .config import Settings
 from .fetchers.afr import AFRFetcher
-from .message import format_batch_message, format_single_article_message
-from .models import Article, PipelineStats
+from .message import (
+    format_batch_message,
+    format_single_article_message,
+    parse_content_blocks,
+    serialize_content_blocks,
+)
+from .models import Article, ArticleBlock, PipelineStats
 from .preview import SummaryCardRenderer
 from .senders.router import SenderRouter
 from .store import SQLiteStore
@@ -52,7 +57,7 @@ class NewsPipeline:
             skipped=0,
         )
         include_article_content = self.settings.afr_max_articles == 1
-        ready_for_delivery: list[tuple[Article, str, str]] = []
+        ready_for_delivery: list[tuple[Article, str, str, tuple[ArticleBlock, ...]]] = []
 
         for article in articles:
             # Persist raw content first so a failed translation/delivery can be retried later.
@@ -76,25 +81,27 @@ class NewsPipeline:
                         )
                 if use_cached_translation:
                     self.logger.info("translation cache hit: title=%s", article.title)
+                    translated_blocks = parse_content_blocks(translated_summary) if include_article_content else ()
                 else:
                     translated_title = self.translator.translate(
                         article.title,
                         source_lang=self.settings.source_lang,
                         target_lang=self.settings.target_lang,
                     )
-                    translated_summary = (
-                        self.translator.translate(
+                    if include_article_content:
+                        translated_blocks = self._translate_content_blocks(article)
+                        translated_summary = serialize_content_blocks(translated_blocks) or self.translator.translate(
                             content_source,
                             source_lang=self.settings.source_lang,
                             target_lang=self.settings.target_lang,
                         )
-                        if include_article_content
-                        else article.summary
-                    )
+                    else:
+                        translated_summary = article.summary
+                        translated_blocks = ()
                     if include_article_content:
                         self.logger.info("translation cache miss: title=%s", article.title)
                 self.store.upsert_event(article, translated_title, translated_summary)
-                ready_for_delivery.append((article, translated_title, translated_summary))
+                ready_for_delivery.append((article, translated_title, translated_summary, translated_blocks))
 
             except Exception as exc:
                 self.store.mark_failed(article.record_key, str(exc))
@@ -111,7 +118,7 @@ class NewsPipeline:
 
         preview_path = None
         if self.preview_renderer is not None:
-            translated_titles = [title for _, title, _ in ready_for_delivery]
+            translated_titles = [title for _, title, _, _ in ready_for_delivery]
             preview_path = self.preview_renderer.render(translated_titles)
             if preview_path:
                 preview_result = self.sender_router.send_image(delivery_target, preview_path)
@@ -129,11 +136,19 @@ class NewsPipeline:
                     )
 
         if include_article_content and len(ready_for_delivery) == 1:
-            _, title, content = ready_for_delivery[0]
-            batch_message = format_single_article_message(title, content)
+            article, title, content, blocks = ready_for_delivery[0]
+            batch_message = format_single_article_message(
+                title,
+                content,
+                article_url=article.url,
+                content_blocks=blocks,
+            )
             mode = "single-with-content"
         else:
-            batch_message = format_batch_message([title for _, title, _ in ready_for_delivery])
+            batch_message = format_batch_message(
+                [title for _, title, _, _ in ready_for_delivery],
+                article_urls=[article.url for article, _, _, _ in ready_for_delivery],
+            )
             mode = "batch-titles"
         self.logger.info(
             "sending message: mode=%s items=%s chars=%s",
@@ -143,12 +158,12 @@ class NewsPipeline:
         )
         routed = self.sender_router.send(delivery_target, batch_message)
 
-        for article, _, _ in ready_for_delivery:
+        for article, _, _, _ in ready_for_delivery:
             for attempt in routed.attempts:
                 self.store.record_delivery_attempt(article.record_key, delivery_target, attempt)
 
         if routed.final_result.success:
-            for article, _, _ in ready_for_delivery:
+            for article, _, _, _ in ready_for_delivery:
                 self.store.mark_sent(article.record_key, routed.final_result.channel)
             stats = PipelineStats(
                 fetched=stats.fetched,
@@ -158,7 +173,7 @@ class NewsPipeline:
             )
         else:
             error = routed.final_result.error_message or "unknown send failure"
-            for article, _, _ in ready_for_delivery:
+            for article, _, _, _ in ready_for_delivery:
                 self.store.mark_failed(article.record_key, error)
             stats = PipelineStats(
                 fetched=stats.fetched,
@@ -169,3 +184,17 @@ class NewsPipeline:
             self.logger.warning("batch delivery failed: count=%s error=%s", len(ready_for_delivery), error)
 
         return stats
+
+    def _translate_content_blocks(self, article: Article) -> tuple[ArticleBlock, ...]:
+        source_blocks = article.content_blocks or parse_content_blocks(article.content or article.summary)
+        translated: list[ArticleBlock] = []
+        for block in source_blocks:
+            if not block.text.strip():
+                continue
+            translated_text = self.translator.translate(
+                block.text,
+                source_lang=self.settings.source_lang,
+                target_lang=self.settings.target_lang,
+            )
+            translated.append(ArticleBlock(kind=block.kind, text=translated_text.strip()))
+        return tuple(translated)

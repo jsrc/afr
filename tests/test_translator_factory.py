@@ -22,6 +22,7 @@ def _settings(provider: str) -> Settings:
         telegram_bot_token=None,
         telegram_chat_id=None,
         telegram_api_base="https://api.telegram.org",
+        telegram_parse_mode="HTML",
         miniapp_api_key="api-key",
         miniapp_api_cors_origins=("https://mini.example.com",),
         preview_enabled=False,

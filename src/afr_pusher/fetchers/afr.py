@@ -11,7 +11,8 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import requests
 from bs4 import BeautifulSoup
 
-from ..models import Article
+from ..message import serialize_content_blocks
+from ..models import Article, ArticleBlock
 
 ARTICLE_PATH_RE = re.compile(r"/[^\s\"'#?]*-\d{8}-p[0-9a-z]+/?$", re.IGNORECASE)
 ARTICLE_ID_RE = re.compile(r"-(p[0-9a-z]+)$", re.IGNORECASE)
@@ -21,6 +22,7 @@ HREF_RE = re.compile(
 )
 ARTICLE_BODY_MIN_LEN = 80
 ARTICLE_CONTENT_MAX_CHARS = 3500
+LIST_ITEM_PREFIX_RE = re.compile(r"^(?:[-*•]\s+)(.+)$")
 
 
 class AFRFetcher:
@@ -104,7 +106,8 @@ class AFRFetcher:
             published_at = published_at or self._normalize_dt(ld_json.get("datePublished"))
             updated_at = updated_at or self._normalize_dt(ld_json.get("dateModified"))
 
-        content = self._extract_article_content(soup, ld_json)
+        content_blocks = self._extract_article_content_blocks(soup, ld_json)
+        content = serialize_content_blocks(content_blocks) or None
 
         if not title:
             return None
@@ -123,6 +126,7 @@ class AFRFetcher:
             published_at=published_at,
             updated_at=updated_at,
             content=content,
+            content_blocks=content_blocks,
         )
 
     def _safe_title(self, soup: BeautifulSoup) -> Optional[str]:
@@ -174,71 +178,94 @@ class AFRFetcher:
         return {}
 
     def _extract_article_content(self, soup: BeautifulSoup, ld_json: dict) -> Optional[str]:
-        chunks: list[str] = []
+        content = serialize_content_blocks(self._extract_article_content_blocks(soup, ld_json))
+        return content or None
 
-        chunks.extend(self._extract_ld_article_bodies(ld_json))
-        if not chunks:
-            chunks.extend(self._extract_dom_paragraphs(soup, min_len=ARTICLE_BODY_MIN_LEN))
-        if not chunks:
-            chunks.extend(self._extract_dom_paragraphs(soup, min_len=40))
+    def _extract_article_content_blocks(self, soup: BeautifulSoup, ld_json: dict) -> tuple[ArticleBlock, ...]:
+        blocks: list[ArticleBlock] = []
 
-        merged = self._merge_chunks(chunks, max_chars=ARTICLE_CONTENT_MAX_CHARS)
-        return merged or None
+        blocks.extend(self._extract_ld_article_blocks(ld_json))
+        if not blocks:
+            blocks.extend(self._extract_dom_blocks(soup, min_len=ARTICLE_BODY_MIN_LEN))
+        if not blocks:
+            blocks.extend(self._extract_dom_blocks(soup, min_len=40))
 
-    def _extract_ld_article_bodies(self, ld_json: dict) -> list[str]:
+        return self._merge_blocks(blocks, max_chars=ARTICLE_CONTENT_MAX_CHARS)
+
+    def _extract_ld_article_blocks(self, ld_json: dict) -> list[ArticleBlock]:
         if not isinstance(ld_json, dict):
             return []
 
-        chunks: list[str] = []
-        direct = self._clean_text(ld_json.get("articleBody"))
-        if direct:
-            chunks.append(direct)
+        blocks: list[ArticleBlock] = []
+        blocks.extend(self._blocks_from_text(ld_json.get("articleBody"), min_len=1))
 
         updates = ld_json.get("liveBlogUpdate")
         if isinstance(updates, list):
             for item in updates:
                 if not isinstance(item, dict):
                     continue
-                body = self._clean_text(item.get("articleBody"))
-                if body and len(body) >= 40:
-                    chunks.append(body)
+                body_blocks = self._blocks_from_text(item.get("articleBody"), min_len=40)
+                blocks.extend(body_blocks)
 
-        return chunks
+        return blocks
 
-    def _extract_dom_paragraphs(self, soup: BeautifulSoup, min_len: int) -> list[str]:
+    def _extract_dom_blocks(self, soup: BeautifulSoup, min_len: int) -> list[ArticleBlock]:
         article = soup.find("article")
         root = article if article else soup
 
-        chunks: list[str] = []
-        for p in root.find_all("p"):
-            text = self._clean_text(p.get_text(" ", strip=True))
+        blocks: list[ArticleBlock] = []
+        for node in root.find_all(["p", "li"]):
+            text = self._clean_text(node.get_text(" ", strip=True))
             if not text:
                 continue
             if len(text) < min_len:
                 continue
-            chunks.append(text)
-        return chunks
+            kind = "list_item" if node.name == "li" else "paragraph"
+            blocks.append(ArticleBlock(kind=kind, text=text))
+        return blocks
 
-    def _merge_chunks(self, chunks: list[str], max_chars: int) -> str:
-        seen: set[str] = set()
-        cleaned: list[str] = []
+    def _merge_blocks(self, blocks: list[ArticleBlock], max_chars: int) -> tuple[ArticleBlock, ...]:
+        seen: set[tuple[str, str]] = set()
+        cleaned: list[ArticleBlock] = []
         total = 0
-        sep = "\n\n"
+        separator = 2
 
-        for chunk in chunks:
-            item = self._clean_text(chunk)
-            if not item or item in seen:
+        for block in blocks:
+            item = self._clean_text(block.text)
+            dedupe_key = (block.kind, item)
+            if not item or dedupe_key in seen:
                 continue
-            seen.add(item)
+            seen.add(dedupe_key)
 
-            extra = len(item) if not cleaned else len(sep) + len(item)
+            extra = len(item) if not cleaned else separator + len(item)
             if total + extra > max_chars:
                 break
 
-            cleaned.append(item)
+            cleaned.append(ArticleBlock(kind=block.kind, text=item))
             total += extra
 
-        return sep.join(cleaned)
+        return tuple(cleaned)
+
+    def _blocks_from_text(self, value: object, min_len: int = ARTICLE_BODY_MIN_LEN) -> list[ArticleBlock]:
+        if not isinstance(value, str):
+            return []
+
+        text = html_lib.unescape(value).replace("\r\n", "\n").replace("\r", "\n")
+        pieces = [piece.strip() for piece in re.split(r"\n\s*\n+", text) if piece.strip()]
+        if len(pieces) <= 1:
+            pieces = [piece.strip() for piece in text.splitlines() if piece.strip()]
+        if len(pieces) <= 1:
+            pieces = [text.strip()]
+
+        blocks: list[ArticleBlock] = []
+        for piece in pieces:
+            match = LIST_ITEM_PREFIX_RE.match(piece)
+            kind = "list_item" if match else "paragraph"
+            payload = match.group(1) if match else piece
+            cleaned = self._clean_text(payload)
+            if cleaned and len(cleaned) >= min_len:
+                blocks.append(ArticleBlock(kind=kind, text=cleaned))
+        return blocks
 
     def _clean_text(self, value: object) -> str:
         if not isinstance(value, str):

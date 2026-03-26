@@ -34,6 +34,7 @@ def _build_router(
             chat_id=settings.telegram_chat_id,
             timeout_sec=settings.request_timeout_sec,
             api_base=settings.telegram_api_base,
+            parse_mode=settings.telegram_parse_mode,
             session=session,
         )
         return SenderRouter(primary=telegram_sender, fallback=None, dry_run=settings.dry_run)

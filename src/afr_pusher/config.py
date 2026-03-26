@@ -100,6 +100,7 @@ class Settings:
     telegram_bot_token: Optional[str]
     telegram_chat_id: Optional[str]
     telegram_api_base: str
+    telegram_parse_mode: Optional[str]
     miniapp_api_key: Optional[str]
     miniapp_api_cors_origins: tuple[str, ...]
     preview_enabled: bool
@@ -139,6 +140,7 @@ class Settings:
             telegram_bot_token=(_pick(values, "TELEGRAM_BOT_TOKEN") or "").strip() or None,
             telegram_chat_id=(_pick(values, "TELEGRAM_CHAT_ID") or "").strip() or None,
             telegram_api_base=(_pick(values, "TELEGRAM_API_BASE", "https://api.telegram.org") or "").strip(),
+            telegram_parse_mode=(_pick(values, "TELEGRAM_PARSE_MODE", "HTML") or "").strip() or None,
             miniapp_api_key=(_pick(values, "MINIAPP_API_KEY") or "").strip() or None,
             miniapp_api_cors_origins=_split_csv(_pick(values, "MINIAPP_API_CORS_ORIGINS")),
             preview_enabled=_as_bool(_pick(values, "PREVIEW_ENABLED", "false"), default=False),

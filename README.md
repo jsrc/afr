@@ -8,6 +8,11 @@
 3. 10 条标题合并成 1 条消息发送
 4. 当 `--max-articles 1`（或 `AFR_MAX_ARTICLES=1`）时，发送“标题 + 正文翻译”
 
+Telegram 消息默认按 `HTML` 富文本发送：
+1. 批量模式：标题列表带编号和原文链接
+2. 单篇模式：标题加粗，正文按段落/要点分块排版
+3. 如需回退纯文本，可将 `TELEGRAM_PARSE_MODE=` 留空
+
 支持发送通道：
 1. Telegram Bot API
 

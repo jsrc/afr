@@ -54,7 +54,12 @@ def test_telegram_send_message_builds_payload() -> None:
     assert result.success is True
     assert len(session.calls) == 1
     assert session.calls[0]["url"] == "https://api.telegram.org/botabc123/sendMessage"
-    assert session.calls[0]["json"] == {"chat_id": "-1000001", "text": "hello world"}
+    assert session.calls[0]["json"] == {
+        "chat_id": "-1000001",
+        "text": "hello world",
+        "disable_web_page_preview": True,
+        "parse_mode": "HTML",
+    }
 
 
 def test_telegram_send_image_posts_multipart(tmp_path: Path) -> None:
@@ -96,3 +101,23 @@ def test_telegram_send_handles_api_error() -> None:
 
     assert result.success is False
     assert "chat not found" in (result.error_message or "")
+
+
+def test_telegram_send_can_disable_parse_mode() -> None:
+    session = FakeSession(FakeResponse(body={"ok": True, "result": {"message_id": 1}}, text="ok"))
+    sender = TelegramBotSender(
+        bot_token="abc123",
+        chat_id="-1000001",
+        timeout_sec=5,
+        parse_mode="plain_text",
+        session=session,
+    )
+
+    result = sender.send("unused", "hello world")
+
+    assert result.success is True
+    assert session.calls[0]["json"] == {
+        "chat_id": "-1000001",
+        "text": "hello world",
+        "disable_web_page_preview": True,
+    }

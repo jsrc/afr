@@ -40,6 +40,8 @@ DEEPL_FORMALITY=
 TELEGRAM_CHAT_ID=
 # Telegram API 基础地址（一般不用改）
 TELEGRAM_API_BASE=https://api.telegram.org
+# Telegram 富文本模式：HTML / MarkdownV2；留空则按纯文本发送
+TELEGRAM_PARSE_MODE=HTML
 
 [api]
 # MiniApp API 鉴权 key 请放在 .env 里的 MINIAPP_API_KEY

@@ -10,6 +10,12 @@ def utc_now_iso() -> str:
 
 
 @dataclass(frozen=True)
+class ArticleBlock:
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True)
 class Article:
     article_id: str
     record_key: str
@@ -19,6 +25,7 @@ class Article:
     published_at: Optional[str]
     updated_at: Optional[str]
     content: Optional[str] = None
+    content_blocks: tuple[ArticleBlock, ...] = ()
 
 
 @dataclass(frozen=True)

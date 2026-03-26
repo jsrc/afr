@@ -18,6 +18,7 @@ class TelegramBotSender(Sender):
         chat_id: str,
         timeout_sec: float,
         api_base: str = "https://api.telegram.org",
+        parse_mode: Optional[str] = "HTML",
         session: Optional[requests.Session] = None,
     ):
         token = bot_token.strip()
@@ -34,13 +35,18 @@ class TelegramBotSender(Sender):
         self.chat_id = target_chat
         self.timeout_sec = timeout_sec
         self.api_base = base.rstrip("/")
+        normalized_parse_mode = (parse_mode or "").strip()
+        self.parse_mode = None if normalized_parse_mode.upper() in {"", "NONE", "PLAIN_TEXT"} else normalized_parse_mode
         self.session = session or requests.Session()
 
     def send(self, target: str, message: str) -> DeliveryResult:
         payload = {
             "chat_id": self.chat_id,
             "text": message,
+            "disable_web_page_preview": True,
         }
+        if self.parse_mode:
+            payload["parse_mode"] = self.parse_mode
         return self._post_json("sendMessage", payload)
 
     def send_image(self, target: str, image_path: Path) -> DeliveryResult:

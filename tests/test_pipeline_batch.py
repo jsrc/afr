@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 from afr_pusher.config import Settings
-from afr_pusher.models import Article, DeliveryResult
+from afr_pusher.models import Article, ArticleBlock, DeliveryResult
 from afr_pusher.pipeline import NewsPipeline
 from afr_pusher.senders.base import Sender
 from afr_pusher.senders.router import SenderRouter
@@ -79,6 +79,7 @@ def _settings(db_path: Path, max_articles: int = 10) -> Settings:
         telegram_bot_token=None,
         telegram_chat_id="@jsrcpush",
         telegram_api_base="https://api.telegram.org",
+        telegram_parse_mode="HTML",
         miniapp_api_key="api-key",
         miniapp_api_cors_origins=("https://mini.example.com",),
         preview_enabled=False,
@@ -118,7 +119,11 @@ def test_pipeline_sends_titles_in_one_message(tmp_path: Path) -> None:
 
     assert len(sender.calls) == 1
     assert sender.calls[0][0] == "@jsrcpush"
-    assert sender.calls[0][1] == "1. ZH:Title One；2. ZH:Title Two"
+    assert sender.calls[0][1] == (
+        "<b>AFR 要闻速览</b>\n\n"
+        '1. <a href="https://www.afr.com/test-pabc001">ZH:Title One</a>\n'
+        '2. <a href="https://www.afr.com/test-pabc002">ZH:Title Two</a>'
+    )
     assert stats.sent == 2
     assert stats.failed == 0
     assert stats.skipped == 0
@@ -143,7 +148,10 @@ def test_pipeline_single_article_sends_title_and_content(tmp_path: Path) -> None
     stats = pipeline.run_once()
 
     assert len(sender.calls) == 1
-    assert sender.calls[0][1] == "标题：ZH:Single Title\n\n内容：ZH:This is full article content with enough details."
+    assert sender.calls[0][1] == (
+        '<a href="https://www.afr.com/test-pone001"><b>ZH:Single Title</b></a>\n\n'
+        "ZH:This is full article content with enough details."
+    )
     assert stats.sent == 1
     assert stats.failed == 0
 
@@ -180,7 +188,10 @@ def test_pipeline_single_article_uses_cached_translation_when_title_exists(tmp_p
     stats = pipeline.run_once()
 
     assert len(sender.calls) == 1
-    assert sender.calls[0][1] == "标题：ZH:缓存标题\n\n内容：ZH:缓存正文"
+    assert sender.calls[0][1] == (
+        '<a href="https://www.afr.com/test-pincoming001"><b>ZH:缓存标题</b></a>\n\n'
+        "ZH:缓存正文"
+    )
     assert stats.sent == 1
     assert stats.failed == 0
 
@@ -218,9 +229,49 @@ def test_pipeline_single_article_bypasses_untranslated_cache(tmp_path: Path) -> 
     stats = pipeline.run_once()
 
     assert len(sender.calls) == 1
-    assert sender.calls[0][1] == "标题：ZH:Same Title\n\n内容：ZH:Same content"
+    assert sender.calls[0][1] == (
+        '<a href="https://www.afr.com/test-pincoming002"><b>ZH:Same Title</b></a>\n\n'
+        "ZH:Same content"
+    )
     assert stats.sent == 1
     assert stats.failed == 0
+
+
+def test_pipeline_single_article_preserves_block_layout(tmp_path: Path) -> None:
+    article = Article(
+        article_id="pblocks001",
+        record_key="pblocks001:2026-02-07T00:00:00+00:00",
+        url="https://www.afr.com/test-pblocks001",
+        title="Structured Title",
+        summary="summary",
+        published_at="2026-02-07T00:00:00+00:00",
+        updated_at="2026-02-07T00:00:00+00:00",
+        content="Lead paragraph\n\n• first item\n\n• second item",
+        content_blocks=(
+            ArticleBlock(kind="paragraph", text="Lead paragraph"),
+            ArticleBlock(kind="list_item", text="first item"),
+            ArticleBlock(kind="list_item", text="second item"),
+        ),
+    )
+    sender = CapturingSender(success=True)
+
+    pipeline = NewsPipeline(
+        settings=_settings(tmp_path / "structured.db", max_articles=1),
+        fetcher=FakeFetcher([article]),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=SQLiteStore(tmp_path / "structured.db"),
+    )
+
+    stats = pipeline.run_once()
+
+    assert sender.calls[0][1] == (
+        '<a href="https://www.afr.com/test-pblocks001"><b>ZH:Structured Title</b></a>\n\n'
+        "ZH:Lead paragraph\n\n"
+        "• ZH:first item\n"
+        "• ZH:second item"
+    )
+    assert stats.sent == 1
 
 
 class FakePreviewRenderer:
@@ -257,6 +308,10 @@ def test_pipeline_sends_preview_image_before_text(tmp_path: Path) -> None:
 
     assert sender.events == ["image", "text"]
     assert sender.image_calls[0] == ("@jsrcpush", preview_path)
-    assert sender.calls[0][1] == "1. ZH:Title One；2. ZH:Title Two"
+    assert sender.calls[0][1] == (
+        "<b>AFR 要闻速览</b>\n\n"
+        '1. <a href="https://www.afr.com/test-pabc001">ZH:Title One</a>\n'
+        '2. <a href="https://www.afr.com/test-pabc002">ZH:Title Two</a>'
+    )
     assert preview_renderer.captured_titles == ["ZH:Title One", "ZH:Title Two"]
     assert stats.sent == 2
