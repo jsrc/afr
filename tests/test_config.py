@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from afr_pusher.config import Settings
 
 
@@ -10,8 +12,11 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
         base_env={},
     )
 
+    assert settings.afr_source is None
     assert settings.afr_homepage_url == "https://www.afr.com"
     assert settings.afr_max_articles == 1
+    assert settings.street_talk_homepage_url == "https://www.afr.com/street-talk"
+    assert settings.street_talk_article_path_prefix == "/street-talk"
     assert settings.request_timeout_sec == 12
     assert settings.translator_provider == "deepl"
     assert settings.run_interval_sec == 600
@@ -26,6 +31,7 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
     config_file = tmp_path / "config.ini"
     config_file.write_text(
         "[settings]\n"
+        "AFR_SOURCE=street-talk\n"
         "AFR_MAX_ARTICLES=7\n"
         "TRANSLATOR_PROVIDER=noop\n"
         "TELEGRAM_CHAT_ID=@ops_team\n",
@@ -38,9 +44,35 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
         base_env={},
     )
 
+    assert settings.afr_source == "street-talk"
     assert settings.afr_max_articles == 7
     assert settings.translator_provider == "noop"
     assert settings.telegram_chat_id == "@ops_team"
+
+
+def test_settings_from_files_normalizes_main_source_alias(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.ini"
+    config_file.write_text("[settings]\nAFR_SOURCE=primary\n", encoding="utf-8")
+
+    settings = Settings.from_files(
+        config_file=config_file,
+        env_file=tmp_path / ".env",
+        base_env={},
+    )
+
+    assert settings.afr_source == "main"
+
+
+def test_settings_from_files_rejects_unknown_source(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.ini"
+    config_file.write_text("[settings]\nAFR_SOURCE=unknown\n", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        Settings.from_files(
+            config_file=config_file,
+            env_file=tmp_path / ".env",
+            base_env={},
+        )
 
 
 def test_settings_from_files_reads_api_security_values(tmp_path: Path) -> None:

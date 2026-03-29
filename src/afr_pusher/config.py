@@ -78,8 +78,20 @@ def _split_csv(value: Optional[str]) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _normalize_source(value: Optional[str]) -> Optional[str]:
+    normalized = (value or "").strip().lower()
+    if not normalized or normalized == "all":
+        return None
+    if normalized in {"main", "primary", "default"}:
+        return "main"
+    if normalized in {"street-talk", "street_talk", "streettalk"}:
+        return "street-talk"
+    raise ValueError("AFR_SOURCE must be empty, 'main', or 'street-talk'.")
+
+
 @dataclass
 class Settings:
+    afr_source: Optional[str]
     afr_homepage_url: str
     afr_article_path_prefix: Optional[str]
     afr_max_articles: int
@@ -109,12 +121,15 @@ class Settings:
 
     run_interval_sec: int
     dry_run: bool
+    street_talk_homepage_url: str = "https://www.afr.com/street-talk"
+    street_talk_article_path_prefix: Optional[str] = "/street-talk"
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, str]) -> "Settings":
         values = {key.upper(): str(value) for key, value in mapping.items() if value is not None}
 
         return cls(
+            afr_source=_normalize_source(_pick(values, "AFR_SOURCE")),
             afr_homepage_url=(_pick(values, "AFR_HOMEPAGE_URL", "https://www.afr.com") or "").strip(),
             afr_article_path_prefix=(_pick(values, "AFR_ARTICLE_PATH_PREFIX") or "").strip() or None,
             afr_max_articles=int(_pick(values, "AFR_MAX_ARTICLES", "1") or "1"),
@@ -148,6 +163,14 @@ class Settings:
             preview_max_titles=int(_pick(values, "PREVIEW_MAX_TITLES", "3") or "3"),
             run_interval_sec=int(_pick(values, "RUN_INTERVAL_SEC", "600") or "600"),
             dry_run=_as_bool(_pick(values, "DRY_RUN", "false"), default=False),
+            street_talk_homepage_url=(
+                _pick(values, "AFR_STREET_TALK_HOMEPAGE_URL", "https://www.afr.com/street-talk")
+                or "https://www.afr.com/street-talk"
+            ).strip(),
+            street_talk_article_path_prefix=(
+                _pick(values, "AFR_STREET_TALK_ARTICLE_PATH_PREFIX", "/street-talk") or ""
+            ).strip()
+            or None,
         )
 
     @classmethod

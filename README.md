@@ -7,6 +7,7 @@
 2. 翻译方向 `EN -> ZH`
 3. 默认发送“标题 + 正文翻译”
 4. 当 `--max-articles` 或 `AFR_MAX_ARTICLES` 大于 1 时，发送“标题列表汇总”
+5. 支持并列推送 `main` 和 `Street Talk` 两个来源
 
 Telegram 消息默认按 `HTML` 富文本发送：
 1. 批量模式：标题列表带编号和原文链接
@@ -98,6 +99,22 @@ AFR_ARTICLE_PATH_PREFIX=
 AFR_HOMEPAGE_URL=https://www.afr.com/topic/markets-live-1po
 AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 ```
+
+来源选择：
+
+```ini
+AFR_SOURCE=
+AFR_STREET_TALK_HOMEPAGE_URL=https://www.afr.com/street-talk
+AFR_STREET_TALK_ARTICLE_PATH_PREFIX=/street-talk
+```
+
+说明：
+1. `AFR_SOURCE=` 留空时，同时推送 `main` 和 `Street Talk`
+2. `AFR_SOURCE=main` 时，只推送主来源
+3. `AFR_SOURCE=street-talk` 时，只推送 `Street Talk`
+4. 当 `AFR_MAX_ARTICLES=1` 时，各来源分别发送最新单篇正文
+5. 当 `AFR_MAX_ARTICLES>1` 时，各来源分别发送标题列表
+6. 也可以临时用命令行覆盖：`--source main` 或 `--source street-talk`
 
 发送通道配置：
 1. 配置 Telegram 后直接发送到 Telegram

@@ -9,6 +9,7 @@ from afr_pusher.config import Settings
 
 def _settings() -> Settings:
     return Settings(
+        afr_source=None,
         afr_homepage_url="https://www.afr.com",
         afr_article_path_prefix=None,
         afr_max_articles=10,

@@ -13,6 +13,7 @@ def test_parse_args_uses_expected_defaults(monkeypatch) -> None:
     assert args.interval_sec is None
     assert args.daily_at is None
     assert args.max_articles is None
+    assert args.source is None
     assert args.dry_run is False
     assert args.log_level == "INFO"
     assert args.install_launchd is False
@@ -33,3 +34,10 @@ def test_parse_args_api_mode(monkeypatch) -> None:
     assert args.serve_api is True
     assert args.api_host == "0.0.0.0"
     assert args.api_port == 18080
+
+
+def test_parse_args_source_override(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["afr_pusher", "--source", "street-talk"])
+    args = _parse_args()
+
+    assert args.source == "street-talk"

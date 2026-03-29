@@ -28,6 +28,8 @@ class NewsPipeline:
         store: SQLiteStore,
         logger: Optional[logging.Logger] = None,
         preview_renderer: Optional[SummaryCardRenderer] = None,
+        feed_name: str = "afr",
+        batch_message_title: str = "AFR 要闻速览",
     ):
         self.settings = settings
         self.fetcher = fetcher
@@ -35,6 +37,8 @@ class NewsPipeline:
         self.sender_router = sender_router
         self.store = store
         self.logger = logger or logging.getLogger(__name__)
+        self.feed_name = feed_name
+        self.batch_message_title = batch_message_title
         if preview_renderer is not None:
             self.preview_renderer = preview_renderer
         elif settings.preview_enabled:
@@ -148,10 +152,12 @@ class NewsPipeline:
             batch_message = format_batch_message(
                 [title for _, title, _, _ in ready_for_delivery],
                 article_urls=[article.url for article, _, _, _ in ready_for_delivery],
+                header=self.batch_message_title,
             )
             mode = "batch-titles"
         self.logger.info(
-            "sending message: mode=%s items=%s chars=%s",
+            "sending message: feed=%s mode=%s items=%s chars=%s",
+            self.feed_name,
             mode,
             len(ready_for_delivery),
             len(batch_message),

@@ -83,12 +83,14 @@ def truncate_content_blocks(blocks: Sequence[ArticleBlock], max_chars: int) -> t
 def format_batch_message(
     translated_titles: Sequence[str],
     article_urls: Optional[Sequence[Optional[str]]] = None,
+    *,
+    header: str = "AFR 要闻速览",
 ) -> str:
     cleaned_titles = [title.strip() for title in translated_titles if title and title.strip()]
     if not cleaned_titles:
         return ""
 
-    lines = ["<b>AFR 要闻速览</b>", ""]
+    lines = [f"<b>{html.escape(header)}</b>", ""]
     for idx, title in enumerate(cleaned_titles, start=1):
         safe_title = html.escape(title)
         url = article_urls[idx - 1] if article_urls and idx - 1 < len(article_urls) else None

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 
-from .config import Settings
+from .config import Settings, _normalize_source
 from .fetchers.afr import AFRFetcher
 from .miniapp_api import run_miniapp_api_server
 from .pipeline import NewsPipeline
@@ -20,6 +20,7 @@ from .senders.router import SenderRouter
 from .senders.telegram import TelegramBotSender
 from .store import SQLiteStore
 from .translators import build_translator
+from .models import PipelineStats
 
 DEFAULT_LAUNCHD_LABEL = "com.afr.pusher"
 
@@ -58,6 +59,26 @@ def _next_daily_run(now: datetime, hour: int, minute: int) -> datetime:
     if candidate <= now:
         candidate += timedelta(days=1)
     return candidate
+
+
+def _merge_stats(left: PipelineStats, right: PipelineStats) -> PipelineStats:
+    return PipelineStats(
+        fetched=left.fetched + right.fetched,
+        sent=left.sent + right.sent,
+        failed=left.failed + right.failed,
+        skipped=left.skipped + right.skipped,
+    )
+
+
+def _run_pipelines(pipelines: list[NewsPipeline]) -> PipelineStats:
+    stats = PipelineStats()
+    for pipeline in pipelines:
+        stats = _merge_stats(stats, pipeline.run_once())
+    return stats
+
+
+def _source_enabled(selected_source: str | None, candidate: str) -> bool:
+    return selected_source is None or selected_source == candidate
 
 
 def _build_launchd_plist(
@@ -200,6 +221,12 @@ def _parse_args() -> argparse.Namespace:
         help="Run once every day at local time HH:MM, e.g. 16:30",
     )
     parser.add_argument("--max-articles", type=int, default=None, help="Override max articles per run")
+    parser.add_argument(
+        "--source",
+        choices=("main", "street-talk"),
+        default=None,
+        help="Override source selection for this run: main or street-talk",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Run pipeline without sending messages")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
@@ -253,6 +280,8 @@ def main() -> None:
         settings.dry_run = True
     if args.max_articles is not None:
         settings.afr_max_articles = args.max_articles
+    if args.source is not None:
+        settings.afr_source = _normalize_source(args.source)
     if args.interval_sec is not None:
         settings.run_interval_sec = args.interval_sec
 
@@ -320,14 +349,44 @@ def main() -> None:
             "or use --dry-run."
         )
 
-    pipeline = NewsPipeline(
-        settings=settings,
-        fetcher=fetcher,
-        translator=translator,
-        sender_router=router,
-        store=store,
-        logger=logger,
-    )
+    pipelines: list[NewsPipeline] = []
+    if _source_enabled(settings.afr_source, "main"):
+        pipelines.append(
+            NewsPipeline(
+                settings=settings,
+                fetcher=fetcher,
+                translator=translator,
+                sender_router=router,
+                store=store,
+                logger=logger,
+                feed_name="main",
+                batch_message_title="AFR 要闻速览",
+            )
+        )
+
+    if _source_enabled(settings.afr_source, "street-talk") and settings.street_talk_homepage_url.strip():
+        street_talk_fetcher = AFRFetcher(
+            homepage_url=settings.street_talk_homepage_url,
+            timeout_sec=settings.request_timeout_sec,
+            user_agent=settings.request_user_agent,
+            article_path_prefix=settings.street_talk_article_path_prefix,
+            session=session,
+        )
+        pipelines.append(
+            NewsPipeline(
+                settings=settings,
+                fetcher=street_talk_fetcher,
+                translator=translator,
+                sender_router=router,
+                store=store,
+                logger=logger,
+                feed_name="street-talk",
+                batch_message_title="Street Talk 文章速览",
+            )
+        )
+
+    if not pipelines:
+        raise SystemExit("No source configured. Check AFR_SOURCE and Street Talk homepage settings.")
 
     if args.daily_at is not None:
         daily_hour, daily_minute = args.daily_at
@@ -347,7 +406,7 @@ def main() -> None:
             )
             time.sleep(wait_seconds)
 
-            stats = pipeline.run_once()
+            stats = _run_pipelines(pipelines)
             logger.info(
                 "run complete: fetched=%s sent=%s failed=%s skipped=%s",
                 stats.fetched,
@@ -358,7 +417,7 @@ def main() -> None:
         return
 
     while True:
-        stats = pipeline.run_once()
+        stats = _run_pipelines(pipelines)
         logger.info(
             "run complete: fetched=%s sent=%s failed=%s skipped=%s",
             stats.fetched,

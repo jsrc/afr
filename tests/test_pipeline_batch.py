@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+from afr_pusher.cli import _run_pipelines
 from afr_pusher.config import Settings
 from afr_pusher.models import Article, ArticleBlock, DeliveryResult
 from afr_pusher.pipeline import NewsPipeline
@@ -63,6 +64,7 @@ class CapturingSender(Sender):
 
 def _settings(db_path: Path, max_articles: int = 10) -> Settings:
     return Settings(
+        afr_source=None,
         afr_homepage_url="https://www.afr.com",
         afr_article_path_prefix=None,
         afr_max_articles=max_articles,
@@ -127,6 +129,28 @@ def test_pipeline_sends_titles_in_one_message(tmp_path: Path) -> None:
     assert stats.sent == 2
     assert stats.failed == 0
     assert stats.skipped == 0
+
+
+def test_pipeline_supports_custom_batch_title(tmp_path: Path) -> None:
+    articles = [_article("pabc001", "Title One"), _article("pabc002", "Title Two")]
+    sender = CapturingSender(success=True)
+
+    pipeline = NewsPipeline(
+        settings=_settings(tmp_path / "street.db"),
+        fetcher=FakeFetcher(articles),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=SQLiteStore(tmp_path / "street.db"),
+        batch_message_title="Street Talk 文章速览",
+    )
+
+    pipeline.run_once()
+
+    assert sender.calls[0][1] == (
+        "<b>Street Talk 文章速览</b>\n\n"
+        '1. <a href="https://www.afr.com/test-pabc001">ZH:Title One</a>\n'
+        '2. <a href="https://www.afr.com/test-pabc002">ZH:Title Two</a>'
+    )
 
 
 def test_pipeline_single_article_sends_title_and_content(tmp_path: Path) -> None:
@@ -272,6 +296,45 @@ def test_pipeline_single_article_preserves_block_layout(tmp_path: Path) -> None:
         "• ZH:second item"
     )
     assert stats.sent == 1
+
+
+def test_run_pipelines_sends_primary_and_street_talk_feeds(tmp_path: Path) -> None:
+    sender = CapturingSender(success=True)
+    db_path = tmp_path / "dual.db"
+    router = SenderRouter(primary=sender, fallback=None)
+    store = SQLiteStore(db_path)
+
+    primary_pipeline = NewsPipeline(
+        settings=_settings(db_path, max_articles=1),
+        fetcher=FakeFetcher([_article("pone001", "Primary Title", content="Primary content")]),
+        translator=PrefixTranslator(),
+        sender_router=router,
+        store=store,
+        batch_message_title="AFR 要闻速览",
+    )
+    street_talk_pipeline = NewsPipeline(
+        settings=_settings(db_path, max_articles=1),
+        fetcher=FakeFetcher([_article("ptwo001", "Street Talk Title", content="Street Talk content")]),
+        translator=PrefixTranslator(),
+        sender_router=router,
+        store=store,
+        batch_message_title="Street Talk 文章速览",
+        feed_name="street-talk",
+    )
+
+    stats = _run_pipelines([primary_pipeline, street_talk_pipeline])
+
+    assert len(sender.calls) == 2
+    assert sender.calls[0][1] == (
+        '<a href="https://www.afr.com/test-pone001"><b>ZH:Primary Title</b></a>\n\n'
+        "ZH:Primary content"
+    )
+    assert sender.calls[1][1] == (
+        '<a href="https://www.afr.com/test-ptwo001"><b>ZH:Street Talk Title</b></a>\n\n'
+        "ZH:Street Talk content"
+    )
+    assert stats.fetched == 2
+    assert stats.sent == 2
 
 
 class FakePreviewRenderer:

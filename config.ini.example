@@ -16,6 +16,13 @@ AFR_ARTICLE_PATH_PREFIX=
 # 示例：只抓 markets/equity-markets 下的文章
 # AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
 
+# 来源选择：留空=同时推送 main 和 Street Talk；可选 main / street-talk
+AFR_SOURCE=
+# Street Talk 栏目页
+AFR_STREET_TALK_HOMEPAGE_URL=https://www.afr.com/street-talk
+# 只抓 Street Talk 文章链接
+AFR_STREET_TALK_ARTICLE_PATH_PREFIX=/street-talk
+
 [storage]
 # SQLite 文件路径
 DB_PATH=./data/afr_pusher.db

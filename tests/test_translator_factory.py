@@ -6,6 +6,7 @@ from afr_pusher.translators.factory import build_translator
 
 def _settings(provider: str) -> Settings:
     return Settings(
+        afr_source=None,
         afr_homepage_url="https://www.afr.com",
         afr_article_path_prefix=None,
         afr_max_articles=5,
