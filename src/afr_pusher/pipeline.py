@@ -64,6 +64,16 @@ class NewsPipeline:
         ready_for_delivery: list[tuple[Article, str, str, tuple[ArticleBlock, ...]]] = []
 
         for article in articles:
+            if self.store.is_sent(article.record_key):
+                stats = PipelineStats(
+                    fetched=stats.fetched,
+                    sent=stats.sent,
+                    failed=stats.failed,
+                    skipped=stats.skipped + 1,
+                )
+                self.logger.info("skipping already-sent article: record_key=%s url=%s", article.record_key, article.url)
+                continue
+
             # Persist raw content first so a failed translation/delivery can be retried later.
             self.store.upsert_event(article, article.title, article.summary)
 

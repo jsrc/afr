@@ -121,6 +121,8 @@ class Settings:
 
     run_interval_sec: int
     dry_run: bool
+    afr_storage_state_path: Path = Path("./data/afr_storage_state.json")
+    afr_login_url: str = "https://www.afr.com"
     street_talk_homepage_url: str = "https://www.afr.com/street-talk"
     street_talk_article_path_prefix: Optional[str] = "/street-talk"
 
@@ -132,6 +134,11 @@ class Settings:
             afr_source=_normalize_source(_pick(values, "AFR_SOURCE")),
             afr_homepage_url=(_pick(values, "AFR_HOMEPAGE_URL", "https://www.afr.com") or "").strip(),
             afr_article_path_prefix=(_pick(values, "AFR_ARTICLE_PATH_PREFIX") or "").strip() or None,
+            afr_storage_state_path=Path(
+                _pick(values, "AFR_STORAGE_STATE_PATH", "./data/afr_storage_state.json")
+                or "./data/afr_storage_state.json"
+            ).expanduser(),
+            afr_login_url=(_pick(values, "AFR_LOGIN_URL", "https://www.afr.com") or "https://www.afr.com").strip(),
             afr_max_articles=int(_pick(values, "AFR_MAX_ARTICLES", "1") or "1"),
             request_timeout_sec=float(_pick(values, "REQUEST_TIMEOUT_SEC", "12") or "12"),
             request_user_agent=(_pick(
@@ -197,5 +204,6 @@ class Settings:
 
     def ensure_dirs(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.afr_storage_state_path.parent.mkdir(parents=True, exist_ok=True)
         if self.preview_enabled:
             self.preview_output_dir.mkdir(parents=True, exist_ok=True)

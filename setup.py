@@ -16,6 +16,7 @@ setup(
     ],
     extras_require={
         "dev": ["pytest>=8.2.0"],
+        "browser": ["playwright>=1.52.0"],
     },
     entry_points={
         "console_scripts": [

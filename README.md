@@ -84,6 +84,39 @@ TELEGRAM_BOT_TOKEN=your_telegram_token
 MINIAPP_API_KEY=replace_with_a_long_random_secret
 ```
 
+### AFR 付费订阅登录（推荐：浏览器保存会话）
+
+如果你订阅了 AFR，希望抓取登录后可见的正文，推荐使用浏览器登录并保存 cookies：
+
+```bash
+pip install -e '.[browser]'
+python3 -m playwright install chromium
+python3 -m afr_pusher --refresh-afr-session --log-level INFO
+```
+
+执行后会打开浏览器窗口：
+1. 在浏览器里完成 AFR 登录
+2. 回到终端按一次 Enter
+3. 程序会把会话保存到 `AFR_STORAGE_STATE_PATH`（默认 `./data/afr_storage_state.json`）
+
+之后正常运行抓取命令时，会自动加载该登录态：
+
+```bash
+python3 -m afr_pusher --dry-run --log-level INFO
+```
+
+相关配置：
+
+```ini
+AFR_STORAGE_STATE_PATH=./data/afr_storage_state.json
+AFR_LOGIN_URL=https://www.afr.com
+```
+
+说明：
+1. 这套方案更适合带验证码、2FA 或站点风控的登录流程
+2. 会话失效后，重新执行一次 `--refresh-afr-session` 即可
+3. `AFR_STORAGE_STATE_PATH` 属于本地敏感文件，不要提交到仓库
+
 ### 常见配置示例
 
 抓 AFR 首页（默认）：

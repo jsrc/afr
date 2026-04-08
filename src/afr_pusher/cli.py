@@ -12,6 +12,7 @@ from pathlib import Path
 
 import requests
 
+from .auth import has_afr_login_state, load_afr_storage_state, refresh_afr_storage_state
 from .config import Settings, _normalize_source
 from .fetchers.afr import AFRFetcher
 from .miniapp_api import run_miniapp_api_server
@@ -230,6 +231,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Run pipeline without sending messages")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
+        "--refresh-afr-session",
+        action="store_true",
+        help="Open a browser, log in to AFR, and save cookies to AFR_STORAGE_STATE_PATH",
+    )
+    parser.add_argument(
         "--install-launchd",
         action="store_true",
         help="Install macOS launchd job using --daily-at",
@@ -287,6 +293,17 @@ def main() -> None:
 
     settings.ensure_dirs()
 
+    if args.refresh_afr_session:
+        if args.install_launchd or args.uninstall_launchd or args.serve_api:
+            raise SystemExit("--refresh-afr-session cannot be combined with launchd or API modes.")
+        refresh_afr_storage_state(
+            storage_state_path=settings.afr_storage_state_path,
+            start_url=settings.afr_login_url,
+            user_agent=settings.request_user_agent,
+            logger=logger,
+        )
+        return
+
     if args.serve_api:
         if args.install_launchd or args.uninstall_launchd:
             raise SystemExit("--serve-api cannot be combined with --install-launchd/--uninstall-launchd.")
@@ -331,6 +348,8 @@ def main() -> None:
 
     session = requests.Session()
     session.headers.update({"User-Agent": settings.request_user_agent})
+    load_afr_storage_state(session, settings.afr_storage_state_path, logger=logger)
+    prefer_content_api = has_afr_login_state(settings.afr_storage_state_path)
 
     store = SQLiteStore(settings.db_path)
     fetcher = AFRFetcher(
@@ -338,6 +357,7 @@ def main() -> None:
         timeout_sec=settings.request_timeout_sec,
         user_agent=settings.request_user_agent,
         article_path_prefix=settings.afr_article_path_prefix,
+        prefer_content_api=prefer_content_api,
         session=session,
     )
     translator = build_translator(settings, session=session)
@@ -370,6 +390,7 @@ def main() -> None:
             timeout_sec=settings.request_timeout_sec,
             user_agent=settings.request_user_agent,
             article_path_prefix=settings.street_talk_article_path_prefix,
+            prefer_content_api=prefer_content_api,
             session=session,
         )
         pipelines.append(

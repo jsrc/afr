@@ -15,6 +15,10 @@ REQUEST_USER_AGENT=Mozilla/5.0
 AFR_ARTICLE_PATH_PREFIX=
 # 示例：只抓 markets/equity-markets 下的文章
 # AFR_ARTICLE_PATH_PREFIX=/markets/equity-markets/
+# 可选：浏览器登录后保存的 AFR 会话文件
+AFR_STORAGE_STATE_PATH=./data/afr_storage_state.json
+# 刷新会话时先打开的页面（默认首页）
+AFR_LOGIN_URL=https://www.afr.com
 
 # 来源选择：留空=同时推送 main 和 Street Talk；可选 main / street-talk
 AFR_SOURCE=

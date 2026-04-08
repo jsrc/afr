@@ -20,6 +20,9 @@ dependencies = [
 dev = [
   "pytest>=8.2.0"
 ]
+browser = [
+  "playwright>=1.52.0"
+]
 
 [project.scripts]
 afr-pusher = "afr_pusher.cli:main"

@@ -14,6 +14,8 @@ def test_settings_from_files_uses_defaults_when_files_missing(tmp_path: Path) ->
 
     assert settings.afr_source is None
     assert settings.afr_homepage_url == "https://www.afr.com"
+    assert settings.afr_storage_state_path == Path("./data/afr_storage_state.json")
+    assert settings.afr_login_url == "https://www.afr.com"
     assert settings.afr_max_articles == 1
     assert settings.street_talk_homepage_url == "https://www.afr.com/street-talk"
     assert settings.street_talk_article_path_prefix == "/street-talk"
@@ -32,6 +34,7 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
     config_file.write_text(
         "[settings]\n"
         "AFR_SOURCE=street-talk\n"
+        "AFR_STORAGE_STATE_PATH=~/afr-session.json\n"
         "AFR_MAX_ARTICLES=7\n"
         "TRANSLATOR_PROVIDER=noop\n"
         "TELEGRAM_CHAT_ID=@ops_team\n",
@@ -45,6 +48,7 @@ def test_settings_from_files_reads_ini_values(tmp_path: Path) -> None:
     )
 
     assert settings.afr_source == "street-talk"
+    assert settings.afr_storage_state_path == Path("~/afr-session.json").expanduser()
     assert settings.afr_max_articles == 7
     assert settings.translator_provider == "noop"
     assert settings.telegram_chat_id == "@ops_team"

@@ -261,6 +261,34 @@ def test_pipeline_single_article_bypasses_untranslated_cache(tmp_path: Path) -> 
     assert stats.failed == 0
 
 
+def test_pipeline_skips_article_when_record_key_was_already_sent(tmp_path: Path) -> None:
+    db_path = tmp_path / "single-skip.db"
+    store = SQLiteStore(db_path)
+    sender = CapturingSender(success=True)
+    article = _article(
+        "pskip001",
+        "Already Sent",
+        content="This should be skipped before translation or delivery.",
+    )
+    store.upsert_event(article, translated_title="ZH:已发送", translated_summary="ZH:正文")
+    store.mark_sent(article.record_key, "capturing")
+
+    pipeline = NewsPipeline(
+        settings=_settings(db_path, max_articles=1),
+        fetcher=FakeFetcher([article]),
+        translator=FailingTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=store,
+    )
+
+    stats = pipeline.run_once()
+
+    assert sender.calls == []
+    assert stats.sent == 0
+    assert stats.failed == 0
+    assert stats.skipped == 1
+
+
 def test_pipeline_single_article_preserves_block_layout(tmp_path: Path) -> None:
     article = Article(
         article_id="pblocks001",
@@ -335,6 +363,36 @@ def test_run_pipelines_sends_primary_and_street_talk_feeds(tmp_path: Path) -> No
     )
     assert stats.fetched == 2
     assert stats.sent == 2
+
+
+def test_pipeline_batch_skips_previously_sent_article_and_sends_remaining(tmp_path: Path) -> None:
+    db_path = tmp_path / "batch-skip.db"
+    store = SQLiteStore(db_path)
+    sent_article = _article("psent001", "Already Sent")
+    fresh_article = _article("pfresh001", "Fresh Title")
+    store.upsert_event(sent_article, translated_title="ZH:Already Sent", translated_summary="summary")
+    store.mark_sent(sent_article.record_key, "capturing")
+    sender = CapturingSender(success=True)
+
+    pipeline = NewsPipeline(
+        settings=_settings(db_path),
+        fetcher=FakeFetcher([sent_article, fresh_article]),
+        translator=PrefixTranslator(),
+        sender_router=SenderRouter(primary=sender, fallback=None),
+        store=store,
+    )
+
+    stats = pipeline.run_once()
+
+    assert len(sender.calls) == 1
+    assert sender.calls[0][1] == (
+        "<b>AFR 要闻速览</b>\n\n"
+        '1. <a href="https://www.afr.com/test-pfresh001">ZH:Fresh Title</a>'
+    )
+    assert stats.fetched == 2
+    assert stats.sent == 1
+    assert stats.failed == 0
+    assert stats.skipped == 1
 
 
 class FakePreviewRenderer:

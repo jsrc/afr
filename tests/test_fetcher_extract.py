@@ -91,3 +91,86 @@ def test_extract_article_content_falls_back_to_dom_paragraphs() -> None:
     assert content is not None
     assert "This is a longer article paragraph" in content
     assert "Another detailed paragraph" in content
+
+
+def test_fetch_article_prefers_content_api_when_enabled(monkeypatch) -> None:
+    fetcher = AFRFetcher(
+        homepage_url="https://www.afr.com/street-talk",
+        timeout_sec=5,
+        user_agent="ua",
+        article_path_prefix="/street-talk",
+        prefer_content_api=True,
+    )
+    article_url = "https://www.afr.com/street-talk/example-20260207-pabc123"
+    page_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="Street Talk Example">
+        <meta name="description" content="Short summary">
+        <meta property="article:published_time" content="2026-02-07T00:00:00Z">
+      </head>
+      <body>
+        <article>
+          <p>Short page teaser.</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    monkeypatch.setattr(fetcher, "_get_text", lambda url: page_html)
+    monkeypatch.setattr(
+        fetcher,
+        "_get_json",
+        lambda url: {
+            "asset": {
+                "body": (
+                    "<p>API lead paragraph with enough detail for testing.</p>"
+                    "<p>API second paragraph that should win over the sparse page teaser.</p>"
+                )
+            }
+        },
+    )
+
+    article = fetcher._fetch_article(article_url)
+
+    assert article is not None
+    assert article.content is not None
+    assert "API lead paragraph with enough detail for testing." in article.content
+    assert "API second paragraph that should win over the sparse page teaser." in article.content
+    assert "Short page teaser." not in article.content
+
+
+def test_fetch_article_falls_back_to_page_content_when_api_has_no_body(monkeypatch) -> None:
+    fetcher = AFRFetcher(
+        homepage_url="https://www.afr.com/street-talk",
+        timeout_sec=5,
+        user_agent="ua",
+        article_path_prefix="/street-talk",
+        prefer_content_api=True,
+    )
+    article_url = "https://www.afr.com/street-talk/example-20260207-pabc123"
+    page_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="Street Talk Example">
+        <meta name="description" content="Short summary">
+        <meta property="article:published_time" content="2026-02-07T00:00:00Z">
+      </head>
+      <body>
+        <article>
+          <p>This is a longer fallback paragraph that should still be extracted when the API is unavailable.</p>
+          <p>Another detailed fallback paragraph that keeps the old HTML-based behaviour intact.</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    monkeypatch.setattr(fetcher, "_get_text", lambda url: page_html)
+    monkeypatch.setattr(fetcher, "_get_json", lambda url: {"asset": {}})
+
+    article = fetcher._fetch_article(article_url)
+
+    assert article is not None
+    assert article.content is not None
+    assert "longer fallback paragraph" in article.content
+    assert "old HTML-based behaviour intact" in article.content

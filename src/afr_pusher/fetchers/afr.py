@@ -22,6 +22,7 @@ HREF_RE = re.compile(
 )
 ARTICLE_BODY_MIN_LEN = 80
 ARTICLE_CONTENT_MAX_CHARS = 3500
+CONTENT_API_URL_TEMPLATE = "https://api.afr.com/api/content/v0/assets/{article_id}"
 LIST_ITEM_PREFIX_RE = re.compile(r"^(?:[-*•]\s+)(.+)$")
 
 
@@ -32,12 +33,14 @@ class AFRFetcher:
         timeout_sec: float,
         user_agent: str,
         article_path_prefix: Optional[str] = None,
+        prefer_content_api: bool = False,
         session: Optional[requests.Session] = None,
     ):
         self.homepage_url = homepage_url
         self.timeout_sec = timeout_sec
         self.user_agent = user_agent
         self.article_path_prefix = article_path_prefix.rstrip("/") if article_path_prefix else None
+        self.prefer_content_api = prefer_content_api
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": self.user_agent})
 
@@ -65,6 +68,12 @@ class AFRFetcher:
         response = self.session.get(url, timeout=self.timeout_sec)
         response.raise_for_status()
         return response.text
+
+    def _get_json(self, url: str) -> dict:
+        response = self.session.get(url, timeout=self.timeout_sec)
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
     def _extract_article_urls(self, html: str) -> list[str]:
         raw_urls = [match.group("href") for match in HREF_RE.finditer(html)]
@@ -106,15 +115,14 @@ class AFRFetcher:
             published_at = published_at or self._normalize_dt(ld_json.get("datePublished"))
             updated_at = updated_at or self._normalize_dt(ld_json.get("dateModified"))
 
-        content_blocks = self._extract_article_content_blocks(soup, ld_json)
-        content = serialize_content_blocks(content_blocks) or None
-
         if not title:
             return None
         if not summary:
             summary = "(No summary extracted)"
 
         article_id = self._extract_article_id(url)
+        content_blocks = self._extract_preferred_content_blocks(soup, ld_json, article_id)
+        content = serialize_content_blocks(content_blocks) or None
         record_key = f"{article_id}:{updated_at or published_at or 'na'}"
 
         return Article(
@@ -181,6 +189,21 @@ class AFRFetcher:
         content = serialize_content_blocks(self._extract_article_content_blocks(soup, ld_json))
         return content or None
 
+    def _extract_preferred_content_blocks(
+        self,
+        soup: BeautifulSoup,
+        ld_json: dict,
+        article_id: str,
+    ) -> tuple[ArticleBlock, ...]:
+        if self.prefer_content_api:
+            try:
+                api_blocks = self._extract_content_api_blocks(article_id)
+            except Exception:
+                api_blocks = ()
+            if api_blocks:
+                return api_blocks
+        return self._extract_article_content_blocks(soup, ld_json)
+
     def _extract_article_content_blocks(self, soup: BeautifulSoup, ld_json: dict) -> tuple[ArticleBlock, ...]:
         blocks: list[ArticleBlock] = []
 
@@ -190,6 +213,22 @@ class AFRFetcher:
         if not blocks:
             blocks.extend(self._extract_dom_blocks(soup, min_len=40))
 
+        return self._merge_blocks(blocks, max_chars=ARTICLE_CONTENT_MAX_CHARS)
+
+    def _extract_content_api_blocks(self, article_id: str) -> tuple[ArticleBlock, ...]:
+        if not article_id:
+            return ()
+
+        payload = self._get_json(CONTENT_API_URL_TEMPLATE.format(article_id=article_id))
+        asset = payload.get("asset")
+        if not isinstance(asset, dict):
+            return ()
+
+        body_html = asset.get("body")
+        if not isinstance(body_html, str) or not body_html.strip():
+            return ()
+
+        blocks = self._extract_html_fragment_blocks(body_html, min_len=1)
         return self._merge_blocks(blocks, max_chars=ARTICLE_CONTENT_MAX_CHARS)
 
     def _extract_ld_article_blocks(self, ld_json: dict) -> list[ArticleBlock]:
@@ -212,15 +251,24 @@ class AFRFetcher:
     def _extract_dom_blocks(self, soup: BeautifulSoup, min_len: int) -> list[ArticleBlock]:
         article = soup.find("article")
         root = article if article else soup
+        return self._extract_block_nodes(root.find_all(["p", "li"]), min_len=min_len)
 
+    def _extract_html_fragment_blocks(self, html_fragment: str, min_len: int) -> list[ArticleBlock]:
+        fragment = BeautifulSoup(html_fragment, "html.parser")
+        return self._extract_block_nodes(fragment.find_all(["p", "li", "h2", "h3"]), min_len=min_len)
+
+    def _extract_block_nodes(self, nodes: Iterable[object], min_len: int) -> list[ArticleBlock]:
         blocks: list[ArticleBlock] = []
-        for node in root.find_all(["p", "li"]):
-            text = self._clean_text(node.get_text(" ", strip=True))
+        for node in nodes:
+            text_getter = getattr(node, "get_text", None)
+            if text_getter is None:
+                continue
+            text = self._clean_text(text_getter(" ", strip=True))
             if not text:
                 continue
             if len(text) < min_len:
                 continue
-            kind = "list_item" if node.name == "li" else "paragraph"
+            kind = "list_item" if getattr(node, "name", "") == "li" else "paragraph"
             blocks.append(ArticleBlock(kind=kind, text=text))
         return blocks
 

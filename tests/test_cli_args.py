@@ -16,6 +16,7 @@ def test_parse_args_uses_expected_defaults(monkeypatch) -> None:
     assert args.source is None
     assert args.dry_run is False
     assert args.log_level == "INFO"
+    assert args.refresh_afr_session is False
     assert args.install_launchd is False
     assert args.uninstall_launchd is False
     assert args.serve_api is False
@@ -41,3 +42,10 @@ def test_parse_args_source_override(monkeypatch) -> None:
     args = _parse_args()
 
     assert args.source == "street-talk"
+
+
+def test_parse_args_refresh_afr_session(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["afr_pusher", "--refresh-afr-session"])
+    args = _parse_args()
+
+    assert args.refresh_afr_session is True
